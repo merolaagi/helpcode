@@ -1,0 +1,31 @@
+# Changelog
+
+All notable changes to helpcode will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [0.1.0] — 2026-05-25
+
+Initial public release.
+
+### Added
+
+- `helpcode init` — detects project language, framework, test command, and source directories
+- `helpcode ask "<task>"` — composes a structured prompt for Claude.ai with selected files, last test output, and a response-format spec
+- `helpcode apply` — parses Claude's pasted reply, shows the planned changes, applies diffs atomically, runs the suggested test command
+- `helpcode run "<command>"` — executes a shell command and captures the output in compact form
+- `helpcode status` — shows the current task and state
+- `helpcode reset` — clears state without touching project code
+- Project detection for Python (Django, FastAPI, Flask) and JavaScript/TypeScript (Next.js, Express, React, Vue)
+- Atomic file patching with safe error reporting on ambiguous diffs
+- Cross-platform support (Linux, macOS, Windows)
+- 15 unit tests + 4 integration tests, all passing on Node 20 and 22
+
+### Notes
+
+This is a foundational release. The roadmap includes multi-LLM orchestration (v0.3), local LLM integration via Ollama (v0.2), and IDE integration (v0.5+). See `docs/ROADMAP.md`.
+
+[Unreleased]: https://github.com/merolaagi/helpcode/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/merolaagi/helpcode/releases/tag/v0.1.0

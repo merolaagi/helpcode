@@ -1,0 +1,52 @@
+{
+  "name": "helpcode",
+  "version": "0.1.0",
+  "description": "A local agent that makes Claude.ai conversations efficient enough to ship real projects on a Pro subscription.",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "helpcode": "dist/bin/helpcode.js"
+  },
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "npm run build && node --test dist/tests/unit/*.test.js dist/tests/integration/*.test.js",
+    "test:unit": "npm run build && node --test dist/tests/unit/*.test.js",
+    "test:integration": "npm run build && node --test dist/tests/integration/*.test.js",
+    "lint": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "claude",
+    "ai",
+    "cli",
+    "code-assistant",
+    "anthropic",
+    "claude-code",
+    "developer-tools",
+    "frugal-ai"
+  ],
+  "author": "Manish Bhattarai",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/merolaagi/helpcode.git",
+    "directory": "packages/cli"
+  },
+  "bugs": {
+    "url": "https://github.com/merolaagi/helpcode/issues"
+  },
+  "homepage": "https://github.com/merolaagi/helpcode#readme",
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "typescript": "^5.4.0"
+  }
+}
