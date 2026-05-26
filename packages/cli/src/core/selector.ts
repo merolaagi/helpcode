@@ -57,19 +57,27 @@ export function selectFiles(taskDescription: string, config: ProjectConfig): str
 export function scoreFile(filepath: string, keywords: string[]): number {
   let score = 0;
 
+  let content = '';
+  try {
+    content = fs.readFileSync(filepath, 'utf-8');
+  } catch {
+    // unreadable; rely on filename match only below
+  }
+
+  // Skip empty or near-empty files entirely. They add noise to briefs
+  // without contributing useful context (think: empty __init__.py).
+  if (content.trim().length < 10) {
+    return 0;
+  }
+
   const base = path.basename(filepath).toLowerCase();
   for (const kw of keywords) {
     if (base.includes(kw)) score += 10;
   }
 
-  let content = '';
-  try {
-    content = fs.readFileSync(filepath, 'utf-8').toLowerCase();
-  } catch {
-    return score; // unreadable; rely on name match only
-  }
+  const lowerContent = content.toLowerCase();
   for (const kw of keywords) {
-    const matches = countOccurrences(content, kw);
+    const matches = countOccurrences(lowerContent, kw);
     if (matches > 0) score += Math.min(matches, 5); // diminishing returns
   }
 

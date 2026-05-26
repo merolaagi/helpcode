@@ -86,12 +86,19 @@ export function detectTestCommand(root: string, language: ProjectConfig['languag
 }
 
 export function detectSourceDirs(root: string): string[] {
-  const candidates = ['src', 'app', 'apps', 'backend', 'server', 'lib', 'packages'];
-  const found = candidates.filter(d => {
+  const codeCandidates = ['src', 'app', 'apps', 'backend', 'server', 'lib', 'packages'];
+  const testCandidates = ['tests', 'test', '__tests__', 'spec'];
+  const isDir = (d: string): boolean => {
     const p = path.join(root, d);
     return fs.existsSync(p) && fs.statSync(p).isDirectory();
-  });
-  return found.length > 0 ? found : ['.'];
+  };
+  const foundCode = codeCandidates.filter(isDir);
+  const foundTests = testCandidates.filter(isDir);
+  // Include tests dirs so the selector can pull test files into briefs —
+  // tests are usually the most important context for "make this work"-style
+  // tasks. If there are no obvious code dirs, fall back to the current dir.
+  const all = [...foundCode, ...foundTests];
+  return all.length > 0 ? all : ['.'];
 }
 
 export function buildDetectedConfig(root: string): ProjectConfig {

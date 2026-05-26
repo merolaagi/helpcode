@@ -28,6 +28,9 @@ export function buildPrompt(input: PromptInput): string {
   if (input.config.framework) {
     parts.push(`- Framework: ${input.config.framework}`);
   }
+  if (input.config.testCommand) {
+    parts.push(`- Test command: \`${input.config.testCommand}\``);
+  }
   const commit = getLastCommitSummary(input.config.root);
   if (commit) parts.push(`- Last commit: ${commit}`);
   const uncommitted = getUncommittedFileCount(input.config.root);

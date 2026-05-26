@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- `init` now detects `tests/`, `test/`, `__tests__/`, and `spec/` directories so the selector can include test files in briefs. Previously, "make this test pass"-style tasks would generate prompts that omitted the very tests they needed to satisfy.
+- The selector now skips empty or near-empty files (e.g. empty `__init__.py`) so they don't clutter the brief.
+- Prompts now include the detected test command in the project context, helping Claude choose a sensible `## TEST` command.
+
+### Added
+
+- Tests covering the above fixes (`tests/unit/detection.test.ts`).
+
 ## [0.1.0] — 2026-05-25
 
 Initial public release.
@@ -27,5 +37,5 @@ Initial public release.
 
 This is a foundational release. The roadmap includes multi-LLM orchestration (v0.3), local LLM integration via Ollama (v0.2), and IDE integration (v0.5+). See `docs/ROADMAP.md`.
 
-[Unreleased]: https://github.com/merolaagi/helpcode/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/merolaagi/helpcode/releases/tag/v0.1.0
+[Unreleased]: https://github.com/USER/helpcode/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/USER/helpcode/releases/tag/v0.1.0
