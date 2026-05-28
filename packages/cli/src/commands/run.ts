@@ -2,11 +2,18 @@
  * `helpcode run <command>` — run a shell command and capture the output
  * in compact form. The result is saved into state so the next `ask` can
  * include it for Claude.
+ *
+ * Side effect (v0.1.3): if the command matches the project's configured
+ * test command AND it succeeds AND the current task is in a `failed` state,
+ * the task is auto-resolved. This fixes the state-drift problem where a
+ * task stays `failed` forever after the user fixes the issue outside
+ * helpcode and re-runs the tests manually.
  */
 
 import { runShellCommand } from '../core/tools.js';
 import { truncateLines, extractTraceback } from '../lib/compress.js';
 import { loadState, saveState } from '../core/state.js';
+import { projectExists, loadProjectConfig } from '../core/project.js';
 import { c, log } from '../lib/ui.js';
 
 const MAX_OUTPUT_LINES = 40;
@@ -50,8 +57,37 @@ export async function handleRun(command: string, opts: RunOptions = {}): Promise
   const state = loadState();
   if (state.currentTask) {
     state.currentTask.lastTestOutput = report;
+
+    // Auto-resolve: if this run matches the project's test command, it
+    // succeeded, and the task was failed, clear the failed state.
+    if (
+      result.exitCode === 0 &&
+      state.currentTask.status === 'failed' &&
+      commandMatchesTestCommand(command)
+    ) {
+      state.currentTask.status = 'resolved';
+      console.log();
+      log.ok('Task marked resolved — the project test command now passes.');
+    }
+
     saveState(state);
   }
 
   return result.exitCode;
+}
+
+/** Does the run command match the project's configured test command? */
+function commandMatchesTestCommand(command: string): boolean {
+  if (!projectExists()) return false;
+  try {
+    const cfg = loadProjectConfig();
+    if (!cfg.testCommand) return false;
+    return normalise(command) === normalise(cfg.testCommand);
+  } catch {
+    return false;
+  }
+}
+
+function normalise(cmd: string): string {
+  return cmd.trim().replace(/\s+/g, ' ');
 }

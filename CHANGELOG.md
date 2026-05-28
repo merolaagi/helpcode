@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.1.3] — 2026-05-28
+
+### Fixed
+
+- **Setup failures are no longer misreported as test failures.** When the configured test command's runner isn't installed (`pytest: command not found`, `No module named pytest`, `'jest' is not recognized...`, `Cannot find module`), `helpcode apply` now says so clearly and tells the user to install it — instead of the generic "Tests failed. Run `helpcode ask`..." which wrongly suggested sending a setup problem back to Claude. Timeouts are also distinguished. Closes #2.
+- **Failed tasks can now be auto-resolved.** When `helpcode run` executes the project's configured test command and it succeeds while the current task is in a `failed` state, the task is automatically marked `resolved`. This fixes the state-drift problem where a task stayed `failed` forever after the user fixed the issue outside helpcode and re-ran the tests. Closes #3.
+
+### Added
+
+- `classifyRunFailure()` in `lib/runclass.ts` — pure function distinguishing `setup` / `timeout` / `test` failures, with 8 unit tests.
+- 3 integration tests for the auto-resolve behaviour (`tests/integration/autoresolve.test.ts`).
+
 ## [0.1.2] — 2026-05-26
 
 ### Fixed
@@ -50,7 +62,8 @@ Initial public release.
 
 This is a foundational release. The roadmap includes multi-LLM orchestration (v0.3), local LLM integration via Ollama (v0.2), and IDE integration (v0.5+). See `docs/ROADMAP.md`.
 
-[Unreleased]: https://github.com/merolaagi/helpcode/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/merolaagi/helpcode/compare/v0.1.3...HEAD
+[0.1.3]: https://github.com/merolaagi/helpcode/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/merolaagi/helpcode/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/merolaagi/helpcode/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/merolaagi/helpcode/releases/tag/v0.1.0

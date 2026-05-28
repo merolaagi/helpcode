@@ -19,7 +19,7 @@ import { handleReset } from './commands/reset.js';
 import { HelpcodeError } from './lib/errors.js';
 import { c, log } from './lib/ui.js';
 
-const VERSION = '0.1.2';
+const VERSION = '0.1.3';
 
 const HELP = `helpcode v${VERSION}
 

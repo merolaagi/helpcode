@@ -16,6 +16,7 @@ import { loadProjectConfig } from '../core/project.js';
 import { parseClaudeResponse, validateParsedResponse, ParsedResponse } from '../core/parser.js';
 import { applyLinePatch } from '../core/patcher.js';
 import { runShellCommand } from '../core/tools.js';
+import { classifyRunFailure } from '../lib/runclass.js';
 import { truncateLines, extractTraceback } from '../lib/compress.js';
 import { readStdin, confirm, c, log } from '../lib/ui.js';
 import { HelpcodeError } from '../lib/errors.js';
@@ -153,7 +154,15 @@ export async function handleApply(opts: ApplyOptions = {}): Promise<number> {
     task.status = 'failed';
     saveState(state);
     console.log();
-    log.warn('Tests failed. Run `helpcode ask "..."` to send the failure back to Claude.');
+    const classification = classifyRunFailure(result);
+    if (classification.kind === 'test') {
+      log.warn(classification.message);
+      log.dim(classification.hint);
+    } else {
+      // setup or timeout: not a Claude problem
+      log.warn(classification.message);
+      if (classification.hint) log.dim(classification.hint);
+    }
     return result.exitCode;
   }
 }
