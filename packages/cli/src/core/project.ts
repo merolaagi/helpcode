@@ -110,6 +110,14 @@ export function buildDetectedConfig(root: string): ProjectConfig {
     testCommand: detectTestCommand(root, language),
     sourceDirs: detectSourceDirs(root),
     createdAt: new Date().toISOString(),
+    // Default: disabled. `init` upgrades this to enabled with a detected
+    // model if Ollama is reachable. Users can flip `enabled` any time.
+    ollama: {
+      enabled: false,
+      model: 'qwen2.5-coder:7b',
+      host: 'http://localhost:11434',
+      timeoutMs: 20000,
+    },
   };
 }
 

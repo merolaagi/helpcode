@@ -7,7 +7,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { loadProjectConfig } from '../core/project.js';
 import { loadState, saveState, createTask } from '../core/state.js';
-import { selectFiles } from '../core/selector.js';
+import { selectFilesWithStrategy } from '../core/selector.js';
 import { buildPrompt } from '../core/prompt.js';
 import { printPasteBlock, log, c } from '../lib/ui.js';
 
@@ -15,6 +15,10 @@ const STATE_DIR = '.helpcode';
 
 export interface AskOptions {
   files?: string[];
+  /** Force the heuristic selector even if Ollama is enabled. */
+  noLlm?: boolean;
+  /** Print the reason each file was selected. */
+  explainSelection?: boolean;
 }
 
 export async function handleAsk(taskDescription: string, opts: AskOptions = {}): Promise<number> {
@@ -35,7 +39,7 @@ export async function handleAsk(taskDescription: string, opts: AskOptions = {}):
     task.iterations += 1;
   }
 
-  // Resolve files: explicit override OR heuristic selection
+  // Resolve files: explicit override, else LLM-or-heuristic strategy
   let selectedFiles: string[];
   if (opts.files && opts.files.length > 0) {
     selectedFiles = opts.files
@@ -47,8 +51,31 @@ export async function handleAsk(taskDescription: string, opts: AskOptions = {}):
         }
         return true;
       });
+    if (opts.explainSelection) {
+      for (const f of selectedFiles) {
+        log.dim(`  ${path.relative(config.root, f)} — explicitly provided via --files`);
+      }
+    }
   } else {
-    selectedFiles = selectFiles(taskDescription, config);
+    if (config.ollama?.enabled && !opts.noLlm) {
+      log.dim(`selecting files (local model: ${config.ollama.model})...`);
+    }
+    const result = await selectFilesWithStrategy(taskDescription, config, {
+      forceHeuristic: opts.noLlm,
+    });
+    selectedFiles = result.files.map(f => f.filepath);
+
+    if (result.strategy === 'llm') {
+      log.ok(`selected ${result.files.length} file(s) via local model`);
+    } else if (result.fallbackReason) {
+      log.dim(`local-model selection unavailable (${result.fallbackReason}) — used keyword heuristic`);
+    }
+
+    if (opts.explainSelection) {
+      for (const f of result.files) {
+        log.dim(`  ${path.relative(config.root, f.filepath)} — ${f.reason}`);
+      }
+    }
   }
 
   if (selectedFiles.length === 0) {

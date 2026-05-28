@@ -1,17 +1,23 @@
 /**
  * File selection — pick the files most likely relevant to a task.
  *
- * v0.1 is heuristic-only:
- *   - Filename match with task keywords
- *   - Content keyword match
- *   - Recency (mtime)
+ * Two strategies:
+ *   - heuristic (v0.1): filename match + content keyword + recency. Always
+ *     available, synchronous, no dependencies.
+ *   - llm (v0.2): a local model reasons about which files matter. Used only
+ *     when Ollama is enabled in project.json AND reachable. Falls back to
+ *     the heuristic on ANY failure.
  *
- * v0.2+ will optionally use a local LLM for semantic ranking via Ollama.
+ * `selectFilesWithStrategy` is the entry point the `ask` command uses. The
+ * old synchronous `selectFiles` (heuristic) is preserved as the fallback and
+ * for callers that want the heuristic explicitly.
  */
 
 import * as fs from 'fs';
 import * as path from 'path';
 import { ProjectConfig } from '../types.js';
+import { isOllamaReachable, OllamaError } from './ollama.js';
+import { llmSelectFiles } from './llmSelector.js';
 
 const IGNORE_DIRS = new Set([
   '.git', '.venv', 'venv', 'env', 'node_modules', '__pycache__',
@@ -26,15 +32,99 @@ const SOURCE_EXTS = new Set([
 
 const MAX_RESULTS = 6;
 const RECENCY_WINDOW_DAYS = 14;
+const LLM_CANDIDATE_CAP = 60;   // cap files sent to the model (design §3.1)
 
 interface FileScore {
   filepath: string;
   score: number;
 }
 
+/** How a file was chosen. `reason` is populated for the LLM strategy. */
+export interface SelectedFile {
+  /** Absolute path. */
+  filepath: string;
+  /** Why it was chosen (LLM reasoning, or a short heuristic note). */
+  reason: string;
+}
+
+export interface SelectionResult {
+  files: SelectedFile[];
+  /** Which strategy actually produced the result. */
+  strategy: 'llm' | 'heuristic';
+  /** If the LLM was attempted but fell back, why. Empty otherwise. */
+  fallbackReason: string;
+}
+
+/**
+ * The entry point used by `ask`. Chooses the LLM strategy when configured and
+ * reachable, otherwise the heuristic. Never throws — any LLM failure degrades
+ * to the heuristic with a recorded reason.
+ */
+export async function selectFilesWithStrategy(
+  taskDescription: string,
+  config: ProjectConfig,
+  opts: { forceHeuristic?: boolean } = {},
+): Promise<SelectionResult> {
+  const ollama = config.ollama;
+  const wantLlm = !opts.forceHeuristic && ollama?.enabled === true;
+
+  if (wantLlm && ollama) {
+    const reachable = await isOllamaReachable(ollama.host, { timeoutMs: 1000 });
+    if (!reachable) {
+      return heuristicResult(taskDescription, config, 'Ollama not reachable');
+    }
+    try {
+      const allFiles = walkAllSourceFiles(config).slice(0, LLM_CANDIDATE_CAP);
+      const selections = await llmSelectFiles(taskDescription, allFiles, config.root, {
+        host: ollama.host,
+        model: ollama.model,
+        count: MAX_RESULTS,
+        timeoutMs: ollama.timeoutMs,
+      });
+      if (selections.length === 0) {
+        return heuristicResult(taskDescription, config, 'model returned no usable files');
+      }
+      // Map relative paths back to absolute for the caller
+      const files: SelectedFile[] = selections.map(s => ({
+        filepath: path.join(config.root, s.path),
+        reason: s.reason,
+      }));
+      return { files, strategy: 'llm', fallbackReason: '' };
+    } catch (e) {
+      const why = e instanceof OllamaError ? e.message : (e as Error).message;
+      return heuristicResult(taskDescription, config, why);
+    }
+  }
+
+  return heuristicResult(taskDescription, config, '');
+}
+
+function heuristicResult(
+  taskDescription: string,
+  config: ProjectConfig,
+  fallbackReason: string,
+): SelectionResult {
+  const files = selectFiles(taskDescription, config).map(filepath => ({
+    filepath,
+    reason: 'matched keywords / recently modified',
+  }));
+  return { files, strategy: 'heuristic', fallbackReason };
+}
+
+/** Walk every source file under the configured source dirs (uncapped). */
+export function walkAllSourceFiles(config: ProjectConfig): string[] {
+  const out: string[] = [];
+  for (const dir of config.sourceDirs) {
+    const start = dir === '.' ? config.root : path.join(config.root, dir);
+    if (!fs.existsSync(start)) continue;
+    walk(start, f => out.push(f));
+  }
+  return out;
+}
+
 /**
  * Walk source dirs, scoring each candidate file against the task description.
- * Returns up to MAX_RESULTS files sorted by descending score.
+ * Returns up to MAX_RESULTS files sorted by descending score. (Heuristic.)
  */
 export function selectFiles(taskDescription: string, config: ProjectConfig): string[] {
   const keywords = extractKeywords(taskDescription);

@@ -18,6 +18,20 @@ export interface ProjectConfig {
   sourceDirs: string[];
   /** When this config was written. */
   createdAt: string;
+  /** Optional local-LLM (Ollama) settings for smarter file selection (v0.2). */
+  ollama?: OllamaSettings;
+}
+
+/** Local-LLM configuration. Opt-in; absent or disabled = heuristic only. */
+export interface OllamaSettings {
+  /** When true, file selection uses the local model (with heuristic fallback). */
+  enabled: boolean;
+  /** Model tag, e.g. "qwen2.5-coder:7b". User-editable. */
+  model: string;
+  /** Ollama server URL. */
+  host: string;
+  /** Generation timeout in milliseconds. */
+  timeoutMs: number;
 }
 
 /** Status of the current iteration with Claude. */

@@ -25,7 +25,7 @@ afterEach(() => {
 });
 
 test('init writes project.json with detected Flask', async () => {
-  const code = await handleInit();
+  const code = await handleInit({ skipOllamaDetection: true });
   assert.equal(code, 0);
   const cfgPath = path.join(tmpDir, '.helpcode', 'project.json');
   assert.ok(fs.existsSync(cfgPath));
@@ -35,7 +35,7 @@ test('init writes project.json with detected Flask', async () => {
 });
 
 test('ask generates a prompt with selected files', async () => {
-  await handleInit();
+  await handleInit({ skipOllamaDetection: true });
   // ask command writes pending.txt
   const code = await handleAsk('fix the login function');
   assert.equal(code, 0);
@@ -50,13 +50,13 @@ test('ask generates a prompt with selected files', async () => {
 });
 
 test('init --force overwrites existing config', async () => {
-  await handleInit();
-  const code = await handleInit({ force: true });
+  await handleInit({ skipOllamaDetection: true });
+  const code = await handleInit({ force: true, skipOllamaDetection: true });
   assert.equal(code, 0);
 });
 
 test('init refuses without --force when already initialised', async () => {
-  await handleInit();
-  const code = await handleInit();
+  await handleInit({ skipOllamaDetection: true });
+  const code = await handleInit({ skipOllamaDetection: true });
   assert.equal(code, 1);
 });

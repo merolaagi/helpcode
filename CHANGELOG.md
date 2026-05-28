@@ -6,6 +6,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-05-28
+
+### Added
+
+- **Local-LLM file selection via Ollama.** When Ollama is installed and a
+  model is available, `helpcode ask` uses a local model to reason about which
+  files are relevant to your task — surfacing files the keyword heuristic
+  would miss (e.g. recognising that a "glucose variability" task should extend
+  an existing time-in-range function). Runs entirely on your machine; no data
+  leaves it, no frontier-model tokens spent. This is the first piece of the
+  two-layer model: local compute for plumbing, Claude for the brain work.
+- `init` now detects Ollama, picks the best available coder-tuned model
+  (preferring `qwen2.5-coder`, `deepseek-coder-v2`, `codestral`, ...), and
+  writes an `ollama` block to `project.json` (enabled when detected).
+- `ask --no-llm` — force the keyword heuristic for one invocation.
+- `ask --explain-selection` — print why each file was chosen.
+- `core/ollama.ts` — zero-dependency Ollama client (injectable fetch for
+  testing).
+- `core/llmSelector.ts` — prompt building, response parsing, and a
+  hallucination guard that validates every model-returned path against the
+  real candidate set.
+
+### Reliability
+
+- LLM selection **never** breaks `ask`: if Ollama is disabled, unreachable,
+  times out, errors, or returns nothing usable, helpcode silently falls back
+  to the keyword heuristic with a recorded reason. Verified by tests covering
+  every fallback path.
+- 73/73 tests passing (26 new across the Ollama client, the selector, and the
+  strategy chooser). No test depends on a live Ollama — CI passes with none
+  installed.
+
 ## [0.1.3] — 2026-05-28
 
 ### Fixed
@@ -62,7 +94,8 @@ Initial public release.
 
 This is a foundational release. The roadmap includes multi-LLM orchestration (v0.3), local LLM integration via Ollama (v0.2), and IDE integration (v0.5+). See `docs/ROADMAP.md`.
 
-[Unreleased]: https://github.com/merolaagi/helpcode/compare/v0.1.3...HEAD
+[Unreleased]: https://github.com/merolaagi/helpcode/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/merolaagi/helpcode/compare/v0.1.3...v0.2.0
 [0.1.3]: https://github.com/merolaagi/helpcode/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/merolaagi/helpcode/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/merolaagi/helpcode/compare/v0.1.0...v0.1.1

@@ -19,7 +19,7 @@ import { handleReset } from './commands/reset.js';
 import { HelpcodeError } from './lib/errors.js';
 import { c, log } from './lib/ui.js';
 
-const VERSION = '0.1.3';
+const VERSION = '0.2.0';
 
 const HELP = `helpcode v${VERSION}
 
@@ -31,7 +31,10 @@ USAGE:
 
 COMMANDS:
   init                       Detect this project and set up .helpcode/
-  ask "<task>" [--files ...] Compose a Claude prompt for the given task
+  ask "<task>" [options]     Compose a Claude prompt for the given task
+       --files <paths...>      include specific files (skips auto-selection)
+       --no-llm                force keyword selection even if Ollama is on
+       --explain-selection     show why each file was chosen
   apply [--yes] [--dry-run]  Apply Claude's pasted reply (from stdin)
   run "<command>"            Run a shell command, get compact output
   status                     Show current task and state
@@ -64,7 +67,11 @@ export async function run(argv: string[]): Promise<number> {
       case 'ask': {
         const files = extractFlagValues(rest, '--files');
         const task = rest.filter(a => !a.startsWith('--') && !files.includes(a)).join(' ');
-        return await handleAsk(task, { files: files.length ? files : undefined });
+        return await handleAsk(task, {
+          files: files.length ? files : undefined,
+          noLlm: rest.includes('--no-llm'),
+          explainSelection: rest.includes('--explain-selection'),
+        });
       }
 
       case 'apply':
