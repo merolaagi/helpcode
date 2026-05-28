@@ -52,6 +52,9 @@ export async function handleApply(opts: ApplyOptions = {}): Promise<number> {
     saveState(state);
     return 1;
   }
+  if (parsed.repairsApplied) {
+    log.dim('(auto-repaired copy-paste corruption in Claude\'s reply — review the plan below carefully)');
+  }
 
   const issues = validateParsedResponse(parsed);
   if (issues.length > 0) {

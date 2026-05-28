@@ -1,6 +1,6 @@
 {
   "name": "helpcode",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "description": "A local agent that makes Claude.ai conversations efficient enough to ship real projects on a Pro subscription.",
   "type": "module",
   "main": "dist/index.js",
@@ -31,17 +31,17 @@
     "developer-tools",
     "frugal-ai"
   ],
-  "author": "Manish Bhattarai",
+  "author": "",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/merolaagi/helpcode.git",
+    "url": "git+https://github.com/USER/helpcode.git",
     "directory": "packages/cli"
   },
   "bugs": {
-    "url": "https://github.com/merolaagi/helpcode/issues"
+    "url": "https://github.com/USER/helpcode/issues"
   },
-  "homepage": "https://github.com/merolaagi/helpcode#readme",
+  "homepage": "https://github.com/USER/helpcode#readme",
   "engines": {
     "node": ">=20"
   },

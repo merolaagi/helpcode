@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.1.2] — 2026-05-26
+
+### Fixed
+
+- **Parser auto-repair for copy-paste corruption from Claude.ai.** When users drag-select Claude's reply from the rendered chat view (instead of using the message's built-in copy icon), the `##` prefix on section headers and the language tag of code fences get stripped or merged into adjacent content — e.g. `## DIFF: foo.py` becomes `DIFF: foo.py`, and `` ```diff `` followed by `--- a/foo` collapses to a single line `diff--- a/foo`. The parser now detects these patterns and reconstructs the missing markers before re-parsing. When repair fires, `helpcode apply` prints a dim notice so the user knows to review carefully. Closes #1.
+
+### Added
+
+- 10 new unit tests in `tests/unit/parser_repair.test.ts` covering the repair function in isolation and end-to-end via `parseClaudeResponse`.
+- `ParsedResponse.repairsApplied: boolean` — surfaced to the CLI so users are told when their input was auto-repaired.
+
+## [0.1.1] — 2026-05-26
+
 ### Fixed
 
 - `init` now detects `tests/`, `test/`, `__tests__/`, and `spec/` directories so the selector can include test files in briefs. Previously, "make this test pass"-style tasks would generate prompts that omitted the very tests they needed to satisfy.
@@ -37,5 +50,7 @@ Initial public release.
 
 This is a foundational release. The roadmap includes multi-LLM orchestration (v0.3), local LLM integration via Ollama (v0.2), and IDE integration (v0.5+). See `docs/ROADMAP.md`.
 
-[Unreleased]: https://github.com/USER/helpcode/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/USER/helpcode/releases/tag/v0.1.0
+[Unreleased]: https://github.com/merolaagi/helpcode/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/merolaagi/helpcode/compare/v0.1.1...v0.1.2
+[0.1.1]: https://github.com/merolaagi/helpcode/compare/v0.1.0...v0.1.1
+[0.1.0]: https://github.com/merolaagi/helpcode/releases/tag/v0.1.0

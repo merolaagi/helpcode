@@ -73,6 +73,7 @@ test('validate: catches missing plan', () => {
     testCommand: null,
     notes: null,
     parseWarning: false,
+    repairsApplied: false,
   });
   assert.ok(issues.some(i => i.includes('PLAN')));
 });
@@ -84,6 +85,7 @@ test('validate: catches empty diff', () => {
     testCommand: null,
     notes: null,
     parseWarning: false,
+    repairsApplied: false,
   });
   assert.ok(issues.some(i => i.includes('Empty diff')));
 });
