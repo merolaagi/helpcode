@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.2.1] — 2026-05-29
+
+### Fixed
+
+- **Source-directory detection no longer relies on a hardcoded name list.**
+  `init` previously only recognised dirs named `src`, `app`, `lib`, `tests`,
+  etc. Any project with non-standard layout — Django apps like `shop/` or
+  `billing/`, a `core/` package, domain-named modules — had those directories
+  silently ignored, so file selection (both heuristic and LLM) never saw the
+  files in them. Detection is now content-based: any directory containing
+  source files is picked up, regardless of its name. Found during v0.2
+  dogfooding on a synthetic project whose bug lived in a `shop/` module that
+  the old detector skipped entirely.
+
+### Added
+
+- Regression tests for non-standard source-dir names, root-level source
+  files, and correct exclusion of `node_modules`/`docs`/etc.
+
 ## [0.2.0] — 2026-05-28
 
 ### Added
@@ -94,7 +113,8 @@ Initial public release.
 
 This is a foundational release. The roadmap includes multi-LLM orchestration (v0.3), local LLM integration via Ollama (v0.2), and IDE integration (v0.5+). See `docs/ROADMAP.md`.
 
-[Unreleased]: https://github.com/merolaagi/helpcode/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/merolaagi/helpcode/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/merolaagi/helpcode/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/merolaagi/helpcode/compare/v0.1.3...v0.2.0
 [0.1.3]: https://github.com/merolaagi/helpcode/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/merolaagi/helpcode/compare/v0.1.1...v0.1.2

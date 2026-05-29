@@ -85,20 +85,79 @@ export function detectTestCommand(root: string, language: ProjectConfig['languag
   return null;
 }
 
+/** Directory names we never treat as source dirs. */
+const NON_SOURCE_DIRS = new Set([
+  '.git', '.venv', 'venv', 'env', 'node_modules', '__pycache__',
+  '.pytest_cache', '.mypy_cache', 'dist', 'build', '.next', '.idea',
+  '.vscode', '.helpcode', 'coverage', '.cache', 'site-packages',
+  'migrations', '.tox', 'htmlcov', '__snapshots__',
+]);
+
+const SOURCE_FILE_EXTS = new Set([
+  '.py', '.js', '.ts', '.jsx', '.tsx', '.go', '.rs', '.rb', '.java',
+]);
+
+/**
+ * Detect source directories by finding top-level dirs that actually contain
+ * source files (directly or shallowly nested), rather than matching a fixed
+ * list of names. This means non-standard layouts — Django apps like `shop/`
+ * or `billing/`, a `core/` package, etc. — are picked up automatically.
+ *
+ * Strategy: scan immediate children of root. A child dir is a source dir if
+ * it (or its shallow descendants) contains at least one source file. Also
+ * include root itself if it has source files directly. Falls back to ['.'].
+ */
 export function detectSourceDirs(root: string): string[] {
-  const codeCandidates = ['src', 'app', 'apps', 'backend', 'server', 'lib', 'packages'];
-  const testCandidates = ['tests', 'test', '__tests__', 'spec'];
-  const isDir = (d: string): boolean => {
-    const p = path.join(root, d);
-    return fs.existsSync(p) && fs.statSync(p).isDirectory();
-  };
-  const foundCode = codeCandidates.filter(isDir);
-  const foundTests = testCandidates.filter(isDir);
-  // Include tests dirs so the selector can pull test files into briefs —
-  // tests are usually the most important context for "make this work"-style
-  // tasks. If there are no obvious code dirs, fall back to the current dir.
-  const all = [...foundCode, ...foundTests];
-  return all.length > 0 ? all : ['.'];
+  const found: string[] = [];
+
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(root, { withFileTypes: true });
+  } catch {
+    return ['.'];
+  }
+
+  let rootHasSource = false;
+  for (const entry of entries) {
+    if (entry.isFile() && SOURCE_FILE_EXTS.has(path.extname(entry.name))) {
+      rootHasSource = true;
+    }
+  }
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    if (NON_SOURCE_DIRS.has(entry.name) || entry.name.startsWith('.')) continue;
+    if (dirContainsSource(path.join(root, entry.name), 2)) {
+      found.push(entry.name);
+    }
+  }
+
+  if (rootHasSource) found.unshift('.');
+  return found.length > 0 ? found : ['.'];
+}
+
+/** Does this dir contain a source file within `maxDepth` levels? */
+function dirContainsSource(dir: string, maxDepth: number): boolean {
+  if (maxDepth < 0) return false;
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return false;
+  }
+  for (const entry of entries) {
+    if (entry.isFile() && SOURCE_FILE_EXTS.has(path.extname(entry.name))) {
+      return true;
+    }
+  }
+  for (const entry of entries) {
+    if (entry.isDirectory()
+        && !NON_SOURCE_DIRS.has(entry.name)
+        && !entry.name.startsWith('.')) {
+      if (dirContainsSource(path.join(dir, entry.name), maxDepth - 1)) return true;
+    }
+  }
+  return false;
 }
 
 export function buildDetectedConfig(root: string): ProjectConfig {

@@ -1,6 +1,6 @@
 {
   "name": "helpcode",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "A local agent that makes Claude.ai conversations efficient enough to ship real projects on a Pro subscription.",
   "type": "module",
   "main": "dist/index.js",

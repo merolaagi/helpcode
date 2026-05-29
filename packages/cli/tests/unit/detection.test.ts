@@ -16,26 +16,54 @@ afterEach(() => {
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 
-test('detectSourceDirs: includes tests/ when it exists', () => {
+test('detectSourceDirs: finds dirs that contain source files', () => {
   fs.mkdirSync(path.join(tmpDir, 'src'));
+  fs.writeFileSync(path.join(tmpDir, 'src', 'main.py'), 'print(1)\n');
   fs.mkdirSync(path.join(tmpDir, 'tests'));
+  fs.writeFileSync(path.join(tmpDir, 'tests', 'test_main.py'), 'def test(): pass\n');
   const dirs = detectSourceDirs(tmpDir);
-  assert.ok(dirs.includes('src'), 'src/ should be detected');
-  assert.ok(dirs.includes('tests'), 'tests/ should be detected so the selector can include test files');
+  assert.ok(dirs.includes('src'), 'src/ with a .py file should be detected');
+  assert.ok(dirs.includes('tests'), 'tests/ with a .py file should be detected');
 });
 
-test('detectSourceDirs: includes __tests__ for JS-style projects', () => {
-  fs.mkdirSync(path.join(tmpDir, 'src'));
-  fs.mkdirSync(path.join(tmpDir, '__tests__'));
+test('detectSourceDirs: finds NON-STANDARD dir names (regression for shop/ bug)', () => {
+  // The v0.2 dogfood found that a Django-style app dir like shop/ was missed
+  // because detection used a hardcoded name list. Content-based detection
+  // must pick up any dir containing source, regardless of its name.
+  fs.mkdirSync(path.join(tmpDir, 'shop'));
+  fs.writeFileSync(path.join(tmpDir, 'shop', 'orders.py'), 'class Order: pass\n');
+  fs.mkdirSync(path.join(tmpDir, 'billing'));
+  fs.writeFileSync(path.join(tmpDir, 'billing', 'invoice.py'), 'def bill(): pass\n');
   const dirs = detectSourceDirs(tmpDir);
-  assert.ok(dirs.includes('__tests__'));
+  assert.ok(dirs.includes('shop'), 'shop/ should be detected by content, not name');
+  assert.ok(dirs.includes('billing'), 'billing/ should be detected by content');
 });
 
-test('detectSourceDirs: includes test/ singular as a fallback', () => {
+test('detectSourceDirs: ignores dirs with no source files', () => {
   fs.mkdirSync(path.join(tmpDir, 'src'));
-  fs.mkdirSync(path.join(tmpDir, 'test'));
+  fs.writeFileSync(path.join(tmpDir, 'src', 'main.py'), 'print(1)\n');
+  fs.mkdirSync(path.join(tmpDir, 'docs'));
+  fs.writeFileSync(path.join(tmpDir, 'docs', 'readme.md'), '# docs\n');
   const dirs = detectSourceDirs(tmpDir);
-  assert.ok(dirs.includes('test'));
+  assert.ok(dirs.includes('src'));
+  assert.ok(!dirs.includes('docs'), 'docs/ (no source files) should be skipped');
+});
+
+test('detectSourceDirs: skips node_modules and friends', () => {
+  fs.mkdirSync(path.join(tmpDir, 'src'));
+  fs.writeFileSync(path.join(tmpDir, 'src', 'index.ts'), 'export {}\n');
+  fs.mkdirSync(path.join(tmpDir, 'node_modules'));
+  fs.mkdirSync(path.join(tmpDir, 'node_modules', 'pkg'));
+  fs.writeFileSync(path.join(tmpDir, 'node_modules', 'pkg', 'i.js'), 'x\n');
+  const dirs = detectSourceDirs(tmpDir);
+  assert.ok(dirs.includes('src'));
+  assert.ok(!dirs.includes('node_modules'), 'node_modules must never be a source dir');
+});
+
+test('detectSourceDirs: includes root "." when source files sit at top level', () => {
+  fs.writeFileSync(path.join(tmpDir, 'app.py'), 'print(1)\n');
+  const dirs = detectSourceDirs(tmpDir);
+  assert.ok(dirs.includes('.'), 'root should be included when it has source files directly');
 });
 
 test('detectSourceDirs: falls back to "." when nothing detected', () => {
