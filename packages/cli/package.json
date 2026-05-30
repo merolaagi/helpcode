@@ -1,14 +1,15 @@
 {
-  "name": "helpcode",
-  "version": "0.2.2",
+  "name": "@manishbht/helpcode",
+  "version": "0.2.3",
   "description": "A local agent that makes Claude.ai conversations efficient enough to ship real projects on a Pro subscription.",
   "type": "module",
-  "main": "dist/index.js",
+  "main": "dist/src/index.js",
   "bin": {
     "helpcode": "dist/bin/helpcode.js"
   },
   "files": [
-    "dist/",
+    "dist/src/",
+    "dist/bin/",
     "README.md",
     "LICENSE"
   ],
@@ -31,17 +32,17 @@
     "developer-tools",
     "frugal-ai"
   ],
-  "author": "",
+  "author": "merolaagi",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/USER/helpcode.git",
+    "url": "git+https://github.com/merolaagi/helpcode.git",
     "directory": "packages/cli"
   },
   "bugs": {
-    "url": "https://github.com/USER/helpcode/issues"
+    "url": "https://github.com/merolaagi/helpcode/issues"
   },
-  "homepage": "https://github.com/USER/helpcode#readme",
+  "homepage": "https://github.com/merolaagi/helpcode#readme",
   "engines": {
     "node": ">=20"
   },
