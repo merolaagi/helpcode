@@ -5,7 +5,21 @@ All notable changes to helpcode will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.3.1] — 2026-05-30
 
+### Added
+
+- **`helpcode plan "<task>"`** — task decomposition, the third local sous-chef.
+  The local model proposes an ordered breakdown of a large task into focused
+  sub-steps for the human to approve and tackle one at a time, giving Claude a
+  tighter brief per step. Proposes only — never runs steps autonomously.
+- `core/decompose.ts` (prompt, parser, decomposeTask) with injected-model tests.
+
+### Notes
+
+- Decomposition has no deterministic fallback (you can't meaningfully split a
+  task without understanding it): if the local model is unavailable, `plan`
+  honestly says so and suggests running `ask` with the task as-is.
 
 ## [0.3.0] — 2026-05-30
 

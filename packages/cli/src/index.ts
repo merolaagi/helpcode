@@ -16,12 +16,13 @@ import { handleAsk } from './commands/ask.js';
 import { handleApply } from './commands/apply.js';
 import { handleRun } from './commands/run.js';
 import { handleStatus } from './commands/status.js';
+import { handlePlan } from './commands/plan.js';
 import { handleCockpit } from './commands/cockpit.js';
 import { handleReset } from './commands/reset.js';
 import { HelpcodeError } from './lib/errors.js';
 import { c, log } from './lib/ui.js';
 
-const VERSION = '0.3.0';
+const VERSION = '0.3.1';
 
 const HELP = `helpcode v${VERSION}
 
@@ -37,6 +38,7 @@ COMMANDS:
        --files <paths...>      include specific files (skips auto-selection)
        --no-llm                force keyword selection even if Ollama is on
        --explain-selection     show why each file was chosen
+  plan "<task>"              Propose an ordered breakdown of a big task (local model)
   apply [--yes] [--dry-run]  Apply Claude's pasted reply (from stdin)
   run "<command>"            Run a shell command, get compact output
   status                     Show current task and state
@@ -75,6 +77,11 @@ export async function run(argv: string[]): Promise<number> {
           noLlm: rest.includes('--no-llm'),
           explainSelection: rest.includes('--explain-selection'),
         });
+      }
+
+      case 'plan': {
+        const task = rest.filter(a => !a.startsWith('--')).join(' ');
+        return await handlePlan(task);
       }
 
       case 'apply':
