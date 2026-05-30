@@ -91,7 +91,8 @@ export function buildSelectionPrompt(
     lines.push(`- ${c.path}: ${c.signature}`);
   }
   lines.push('');
-  lines.push(`Return the ${count} files most relevant to the task, most relevant first.`);
+  lines.push(`Return UP TO ${count} files that are genuinely relevant to the task, most relevant first.`);
+  lines.push('Include FEWER than ' + count + ' if fewer are truly relevant — do not pad the list with files that are empty or unrelated.');
   lines.push('Format each line exactly as:');
   lines.push('  PATH | one-line reason');
   lines.push('Only use paths from the candidate list above. No prose, no other text.');
@@ -152,7 +153,18 @@ export async function llmSelectFiles(
   projectRoot: string,
   opts: { host: string; model: string; count: number; timeoutMs?: number },
 ): Promise<Selection[]> {
-  const candidates: Candidate[] = candidatePaths.map(p => ({
+  // Filter out empty / near-empty files (e.g. empty __init__.py) before they
+  // ever reach the model. Matches the heuristic selector's v0.1.1 behaviour
+  // and stops the model padding its answer with files it admits are empty.
+  const meaningful = candidatePaths.filter(p => {
+    try {
+      return fs.readFileSync(p, 'utf-8').trim().length >= 10;
+    } catch {
+      return false;
+    }
+  });
+
+  const candidates: Candidate[] = meaningful.map(p => ({
     path: path.relative(projectRoot, p),
     signature: buildSignature(p),
   }));

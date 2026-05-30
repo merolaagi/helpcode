@@ -12,7 +12,8 @@
 
 import { runShellCommand } from '../core/tools.js';
 import { truncateLines, extractTraceback } from '../lib/compress.js';
-import { loadState, saveState } from '../core/state.js';
+import { loadState, saveState, appendSousChefEvent } from '../core/state.js';
+import { AgentState } from '../types.js';
 import { projectExists, loadProjectConfig } from '../core/project.js';
 import { triageOutput, shouldTriage } from '../core/triage.js';
 import { c, log } from '../lib/ui.js';
@@ -75,6 +76,7 @@ export async function handleRun(command: string, opts: RunOptions = {}): Promise
           triaged.text,
         ].join('\n');
         log.dim('(summarised long output with local model for the next brief)');
+        recordTriageEvent(state, cfg.ollama.model, rawForTriage, triaged.text);
       }
     }
 
@@ -122,4 +124,25 @@ function commandMatchesTestCommand(command: string): boolean {
 
 function normalise(cmd: string): string {
   return cmd.trim().replace(/\s+/g, ' ');
+}
+
+/** Append a triage sous-chef event to the in-memory state (saved by caller). */
+function recordTriageEvent(
+  state: AgentState,
+  model: string,
+  rawOutput: string,
+  triagedText: string,
+): void {
+  const rawLines = rawOutput.split('\n').length;
+  const triagedLines = triagedText.split('\n').length;
+  appendSousChefEvent(state, {
+    at: new Date().toISOString(),
+    task: 'output_triage',
+    worker: 'local',
+    model,
+    summary: `triaged ${rawLines} lines to key failure`,
+    outcome: 'ok',
+    // rough: lines dropped ≈ tokens saved, ~8 tokens/line
+    estTokensSaved: Math.max(0, (rawLines - triagedLines) * 8),
+  });
 }

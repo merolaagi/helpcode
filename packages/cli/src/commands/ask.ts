@@ -6,7 +6,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { loadProjectConfig } from '../core/project.js';
-import { loadState, saveState, createTask } from '../core/state.js';
+import { loadState, saveState, createTask, appendSousChefEvent } from '../core/state.js';
 import { selectFilesWithStrategy } from '../core/selector.js';
 import { buildPrompt } from '../core/prompt.js';
 import { printPasteBlock, log, c } from '../lib/ui.js';
@@ -64,6 +64,21 @@ export async function handleAsk(taskDescription: string, opts: AskOptions = {}):
       forceHeuristic: opts.noLlm,
     });
     selectedFiles = result.files.map(f => f.filepath);
+
+    // Record this prep work for the cockpit. Append to the state we already
+    // hold (saved at the end of this function) — not a separate load/save,
+    // which would be clobbered by our own saveState below.
+    appendSousChefEvent(state, {
+      at: new Date().toISOString(),
+      task: 'file_selection',
+      worker: result.strategy === 'llm' ? 'local' : 'deterministic',
+      model: result.strategy === 'llm' ? (config.ollama?.model ?? null) : null,
+      summary: result.strategy === 'llm'
+        ? `selected ${result.files.length} file(s) by reasoning`
+        : `selected ${result.files.length} file(s) by keyword heuristic`,
+      outcome: result.strategy === 'llm' ? 'ok' : (result.fallbackReason ? 'fallback' : 'ok'),
+      estTokensSaved: null,
+    });
 
     if (result.strategy === 'llm') {
       log.ok(`selected ${result.files.length} file(s) via local model`);

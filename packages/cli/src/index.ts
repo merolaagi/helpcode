@@ -1,13 +1,14 @@
 /**
  * helpcode — CLI router.
  *
- * Six commands, kept deliberately small:
- *   init    detect project and set up .helpcode/
- *   ask     compose a prompt for Claude.ai
- *   apply   apply Claude's reply
- *   run     run a shell command, get compact output
- *   status  show current state
- *   reset   clear state
+ * Commands, kept deliberately small:
+ *   init     detect project and set up .helpcode/
+ *   ask      compose a prompt for Claude.ai
+ *   apply    apply Claude's reply
+ *   run      run a shell command, get compact output
+ *   status   show current state
+ *   cockpit  show the sous-chef kitchen this session (v0.3)
+ *   reset    clear state
  */
 
 import { handleInit } from './commands/init.js';
@@ -15,11 +16,12 @@ import { handleAsk } from './commands/ask.js';
 import { handleApply } from './commands/apply.js';
 import { handleRun } from './commands/run.js';
 import { handleStatus } from './commands/status.js';
+import { handleCockpit } from './commands/cockpit.js';
 import { handleReset } from './commands/reset.js';
 import { HelpcodeError } from './lib/errors.js';
 import { c, log } from './lib/ui.js';
 
-const VERSION = '0.2.3';
+const VERSION = '0.3.0';
 
 const HELP = `helpcode v${VERSION}
 
@@ -38,6 +40,7 @@ COMMANDS:
   apply [--yes] [--dry-run]  Apply Claude's pasted reply (from stdin)
   run "<command>"            Run a shell command, get compact output
   status                     Show current task and state
+  cockpit                    Show the sous-chef kitchen this session
   reset [--yes]              Clear state (project config is untouched)
 
 GLOBAL FLAGS:
@@ -88,6 +91,9 @@ export async function run(argv: string[]): Promise<number> {
 
       case 'status':
         return await handleStatus();
+
+      case 'cockpit':
+        return await handleCockpit();
 
       case 'reset':
         return await handleReset({ yes: rest.includes('--yes') });

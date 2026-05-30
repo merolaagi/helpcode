@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+
+## [0.3.0] — 2026-05-30
+
+### Added
+
+- **`helpcode cockpit`** — a read-only window onto the "kitchen": which local
+  sous-chef workers did which prep tasks this session (file selection, output
+  triage), what was escalated to the principal, and a rough estimate of
+  principal tokens saved. First piece of the v0.3 orchestration model.
+- Sous-chef event log in state (schema v2, auto-migrated from v1).
+- `core/cockpit.ts` with tested aggregation separated from rendering.
+
+### Changed
+
+- State schema bumped to v2; v1 migrates forward automatically (no reset needed).
+
 ## [0.2.2] — 2026-05-29
 
 ### Added

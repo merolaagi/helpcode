@@ -46,10 +46,16 @@ export type TaskStatus =
 /** The agent's memory across CLI invocations. Stored at .helpcode/state.json. */
 export interface AgentState {
   /** Schema version so we can migrate later without breaking installs. */
-  version: 1;
+  version: 2;
   currentTask: CurrentTask | null;
   /** History of resolved tasks (summary only, not full content). */
   history: TaskHistoryEntry[];
+  /**
+   * Rolling log of sous-chef work this session (v0.3). The cockpit reads this;
+   * the tasks (and future engine) append to it. Capped to a recent window so
+   * the state file stays small.
+   */
+  sousChefLog: SousChefEvent[];
 }
 
 export interface CurrentTask {
@@ -80,4 +86,59 @@ export interface TaskHistoryEntry {
   description: string;
   resolvedAt: string;
   iterations: number;
+}
+
+// ---------------------------------------------------------------------------
+// v0.3 cockpit model
+//
+// The cockpit is the instrument panel for helpcode's "kitchen": which worker
+// (sous-chef) did which prep task, and what got escalated to the principal
+// (Claude.ai). v0.3.0 builds the *window* — it reads these events and renders
+// them. The eventual engine writes the same events when it dispatches work, so
+// the window and the engine share one model. Design the model now as if the
+// engine exists; wire only the reading + the existing tasks' writing for now.
+// ---------------------------------------------------------------------------
+
+/** Who did a unit of prep work. */
+export type WorkerKind =
+  | 'local'        // an Ollama model on this machine
+  | 'remote'       // a free-tier remote API sous-chef (v0.3.2+)
+  | 'deterministic'// plain code, no model (e.g. keyword heuristic, truncation)
+  | 'principal';   // the principal helper (Claude.ai) — the escalation target
+
+/** A prep task helpcode knows how to route to a worker. */
+export type SousChefTask =
+  | 'file_selection'
+  | 'output_triage'
+  | 'decomposition'   // v0.3.1
+  | 'other';
+
+/** One recorded unit of work, written by whoever performed it. */
+export interface SousChefEvent {
+  /** ISO timestamp. */
+  at: string;
+  /** Which prep task. */
+  task: SousChefTask;
+  /** Who did it. */
+  worker: WorkerKind;
+  /** Model tag if a model did it (e.g. "qwen2.5-coder:7b"), else null. */
+  model: string | null;
+  /** One-line human-readable summary of what happened. */
+  summary: string;
+  /** Did this work succeed, or fall back to a cheaper worker? */
+  outcome: 'ok' | 'fallback' | 'escalated';
+  /** Rough estimate of principal tokens this prep saved, if known. */
+  estTokensSaved: number | null;
+}
+
+/** Per-worker rolling status for the cockpit panels. */
+export interface WorkerStatus {
+  kind: WorkerKind;
+  model: string | null;
+  /** Free-tier quota used 0..1, if the worker has a quota (remote). null = N/A. */
+  quotaUsed: number | null;
+  /** Count of events this session. */
+  eventsThisSession: number;
+  /** Last summary line, for the panel log. */
+  lastSummary: string | null;
 }
