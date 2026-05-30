@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.2.2] — 2026-05-29
+
+### Added
+
+- **Local-LLM output triage** — the second local-model task after file
+  selection. When Ollama is enabled and a command (usually a test run)
+  produces long output, helpcode asks the local model to extract just the
+  key failure — which test failed, the error, the file and line — so the
+  next Claude brief carries the signal instead of a 200-line wall of passing
+  tests and setup banners. The console still shows the full compact report;
+  only the saved-for-next-brief version is summarised.
+- `core/triage.ts` — `shouldTriage`, `buildTriagePrompt`, `triageOutput`,
+  with an injectable model call for testing (9 new tests).
+
+### Reliability
+
+- Triage follows the same never-break contract as file selection: if Ollama
+  is disabled, unreachable, slow, errors, or returns nothing, helpcode falls
+  back to the existing deterministic head+tail truncation. Output is never
+  lost — worst case is the same truncation as before.
+- 84/84 tests passing. No test depends on a live Ollama.
+
 ## [0.2.1] — 2026-05-29
 
 ### Fixed
@@ -113,7 +135,8 @@ Initial public release.
 
 This is a foundational release. The roadmap includes multi-LLM orchestration (v0.3), local LLM integration via Ollama (v0.2), and IDE integration (v0.5+). See `docs/ROADMAP.md`.
 
-[Unreleased]: https://github.com/merolaagi/helpcode/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/merolaagi/helpcode/compare/v0.2.2...HEAD
+[0.2.2]: https://github.com/merolaagi/helpcode/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/merolaagi/helpcode/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/merolaagi/helpcode/compare/v0.1.3...v0.2.0
 [0.1.3]: https://github.com/merolaagi/helpcode/compare/v0.1.2...v0.1.3

@@ -14,6 +14,7 @@ import { runShellCommand } from '../core/tools.js';
 import { truncateLines, extractTraceback } from '../lib/compress.js';
 import { loadState, saveState } from '../core/state.js';
 import { projectExists, loadProjectConfig } from '../core/project.js';
+import { triageOutput, shouldTriage } from '../core/triage.js';
 import { c, log } from '../lib/ui.js';
 
 const MAX_OUTPUT_LINES = 40;
@@ -53,10 +54,31 @@ export async function handleRun(command: string, opts: RunOptions = {}): Promise
   const report = parts.join('\n');
   console.log(report);
 
-  // Save to state so `ask` can include it
+  // Save to state so `ask` can include it. When Ollama is enabled and the
+  // raw output is long, run it through local-LLM triage so the NEXT brief
+  // carries just the key failure rather than the whole wall of output. The
+  // console above still shows the full compact report to the user.
   const state = loadState();
   if (state.currentTask) {
-    state.currentTask.lastTestOutput = report;
+    let savedOutput = report;
+
+    const cfg = loadConfigSafe();
+    const rawForTriage = [result.stdout, result.stderr].filter(Boolean).join('\n').trim();
+    if (cfg?.ollama && shouldTriage(rawForTriage, cfg.ollama)) {
+      const triaged = await triageOutput(rawForTriage, cfg.ollama);
+      if (triaged.triaged) {
+        savedOutput = [
+          `$ ${command}`,
+          `Exit: ${result.exitCode}    Time: ${(result.durationMs / 1000).toFixed(2)}s`,
+          '',
+          '--- key failure (summarised by local model) ---',
+          triaged.text,
+        ].join('\n');
+        log.dim('(summarised long output with local model for the next brief)');
+      }
+    }
+
+    state.currentTask.lastTestOutput = savedOutput;
 
     // Auto-resolve: if this run matches the project's test command, it
     // succeeded, and the task was failed, clear the failed state.
@@ -74,6 +96,16 @@ export async function handleRun(command: string, opts: RunOptions = {}): Promise
   }
 
   return result.exitCode;
+}
+
+/** Load project config without throwing if absent. */
+function loadConfigSafe() {
+  if (!projectExists()) return null;
+  try {
+    return loadProjectConfig();
+  } catch {
+    return null;
+  }
 }
 
 /** Does the run command match the project's configured test command? */
