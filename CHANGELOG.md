@@ -5,6 +5,31 @@ All notable changes to helpcode will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [0.3.2] — 2026-05-30
+
+### Added
+
+- **First remote sous-chef (Gemini free tier).** `helpcode plan` now falls back
+  to a free-tier remote model when the local model is unavailable. The
+  `SousChef` interface makes local and remote workers interchangeable;
+  cheapest-capable-first routing prefers local, then remote.
+- **Privacy gate** (core/souschef.ts): a remote free-tier worker may only
+  receive data the user accepts leaving the machine. By default that's
+  decomposition only (task description, no source code). Free-tier inputs may
+  train the provider's models, so code-bearing tasks require an explicit
+  per-project `allowRemoteCode` opt-in (off by default).
+- **API key loading** (core/keys.ts): `GEMINI_API_KEY` env var (precedence) or
+  gitignored `.helpcode/keys.json`. No key → behaves exactly as v0.3.1.
+- **Gemini REST client** (core/gemini.ts): zero-dep, injectable fetch, typed
+  errors with 429/quota detection. The cockpit shows remote workers alongside
+  local ones.
+
+### Notes
+
+- Never-break contract extended: remote failure (network, 429, auth, timeout)
+  falls back to local, then deterministic, then plain `ask`.
+- 131/131 tests passing (30 new); no test touches the live API.
 ## [0.3.1] — 2026-05-30
 
 ### Added
