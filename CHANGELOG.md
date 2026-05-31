@@ -6,6 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+
+## [0.3.5] — 2026-05-31
+
+### Added
+
+- **More remote providers: Grok (xAI) and ChatGPT (OpenAI)**, alongside Gemini.
+  They share one OpenAI-compatible client (`core/providers.ts`) and differ only
+  in config (base URL, model, env var, data-policy note); Gemini keeps its own
+  REST client. To the user they're distinct providers with distinct keys.
+- `core/remoteRouter.ts` — picks the first remote provider that has a key,
+  with an optional per-project `remote.provider` preference; unifies Gemini and
+  the OpenAI-compatible providers behind one generate() so plan/selection/
+  triage don't care which answered. Priority: Gemini → Grok → ChatGPT.
+- Keys via env var (`XAI_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`) or
+  gitignored keys.json. No key for a provider → it simply isn't available.
+
+### Notes
+
+- All free tiers may train on inputs, so every remote provider stays under the
+  existing privacy gate: decomposition by default, code only with
+  allowRemoteCode. Each provider documents its data policy.
+- 168/168 tests; no test touches a live API. Gemini routing verified live;
+  Grok/ChatGPT use the same unit-tested client (model strings may need a tweak
+  per provider when first keyed).
 ## [0.3.4] — 2026-05-31
 
 ### Added

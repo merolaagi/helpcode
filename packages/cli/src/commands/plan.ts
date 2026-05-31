@@ -15,12 +15,9 @@
 import { loadProjectConfig } from '../core/project.js';
 import { loadState, saveState, appendSousChefEvent } from '../core/state.js';
 import { decomposeTask, buildDecompositionPrompt, parseDecomposition } from '../core/decompose.js';
-import { geminiGenerate, GeminiError } from '../core/gemini.js';
-import { loadGeminiKey } from '../core/keys.js';
+import { firstAvailableProvider } from '../core/remoteRouter.js';
 import { WorkerKind } from '../types.js';
 import { c, log } from '../lib/ui.js';
-
-const GEMINI_MODEL = 'gemini-2.5-flash-lite';
 
 interface PlanOutcome {
   ok: boolean;
@@ -102,10 +99,11 @@ async function decomposeViaSousChef(task: string, config: any): Promise<PlanOutc
     log.dim(`local model unavailable (${local.reason})`);
   }
 
-  // 2. Remote free-tier, if a key is configured. Decomposition is always
-  //    privacy-allowed (task description only, no code).
-  const key = loadGeminiKey();
-  if (!key) {
+  // 2. Remote free-tier, if any provider has a key. Decomposition is always
+  //    privacy-allowed (task description only, no code). A project may name a
+  //    preferred provider via config.remote.provider.
+  const provider = firstAvailableProvider(process.env, config.remote?.provider);
+  if (!provider) {
     if (!config.ollama?.enabled) {
       return { ok: false, steps: [], worker: 'local', model: null,
         reason: 'no local model enabled and no free-tier key configured' };
@@ -113,21 +111,18 @@ async function decomposeViaSousChef(task: string, config: any): Promise<PlanOutc
     return { ok: false, steps: [], worker: 'local', model: null, reason: 'local model unavailable' };
   }
 
-  log.dim(`thinking through the steps (free-tier ${GEMINI_MODEL})...`);
+  log.dim(`thinking through the steps (free-tier ${provider.label} · ${provider.model})...`);
   try {
-    const text = await geminiGenerate(buildDecompositionPrompt(task), {
-      apiKey: key, model: GEMINI_MODEL, timeoutMs: 30000,
-    });
+    const text = await provider.generate(buildDecompositionPrompt(task));
     const steps = parseDecomposition(text);
     if (steps.length >= 2) {
-      return { ok: true, steps, worker: 'remote', model: GEMINI_MODEL, reason: '' };
+      return { ok: true, steps, worker: 'remote', model: provider.model, reason: '' };
     }
     if (steps.length === 1) {
-      return { ok: false, steps, worker: 'remote', model: GEMINI_MODEL, reason: 'single step — not worth decomposing' };
+      return { ok: false, steps, worker: 'remote', model: provider.model, reason: 'single step — not worth decomposing' };
     }
-    return { ok: false, steps: [], worker: 'remote', model: GEMINI_MODEL, reason: 'no steps parsed' };
+    return { ok: false, steps: [], worker: 'remote', model: provider.model, reason: 'no steps parsed' };
   } catch (e) {
-    const why = e instanceof GeminiError ? e.message : (e as Error).message;
-    return { ok: false, steps: [], worker: 'remote', model: GEMINI_MODEL, reason: `remote failed: ${why}` };
+    return { ok: false, steps: [], worker: 'remote', model: provider.model, reason: `remote failed: ${(e as Error).message}` };
   }
 }

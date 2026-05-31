@@ -16,13 +16,11 @@ import { loadState, saveState, appendSousChefEvent } from '../core/state.js';
 import { AgentState } from '../types.js';
 import { projectExists, loadProjectConfig } from '../core/project.js';
 import { triageOutput, shouldTriage } from '../core/triage.js';
-import { geminiGenerate } from '../core/gemini.js';
-import { loadGeminiKey } from '../core/keys.js';
+import { firstAvailableProvider } from '../core/remoteRouter.js';
 import { shouldShowRemoteCodeNotice, remoteCodeNoticeText } from '../core/consent.js';
 import { SousChefTask } from '../types.js';
 import { c, log } from '../lib/ui.js';
 
-const REMOTE_TRIAGE_MODEL = 'gemini-2.5-flash-lite';
 
 function maybeShowRemoteCodeNotice(task: SousChefTask, model: string): void {
   try {
@@ -87,23 +85,21 @@ export async function handleRun(command: string, opts: RunOptions = {}): Promise
     const rawForTriage = [result.stdout, result.stderr].filter(Boolean).join('\n').trim();
     if (cfg?.ollama && shouldTriage(rawForTriage, cfg.ollama)) {
       // Triage output is code-bearing, so a remote fallback is only offered when
-      // the project opted into allowRemoteCode AND a key is present.
+      // the project opted into allowRemoteCode AND a provider key is present.
       let remoteGenerate: ((prompt: string) => Promise<string>) | undefined;
       let remoteModel: string | null = null;
       if (cfg.remote?.allowRemoteCode === true) {
-        const key = loadGeminiKey();
-        if (key) {
-          remoteModel = REMOTE_TRIAGE_MODEL;
-          remoteGenerate = (prompt: string) => geminiGenerate(prompt, {
-            apiKey: key, model: REMOTE_TRIAGE_MODEL, timeoutMs: 30000,
-          });
+        const provider = firstAvailableProvider(process.env, cfg.remote?.provider);
+        if (provider) {
+          remoteModel = `${provider.label} · ${provider.model}`;
+          remoteGenerate = (prompt: string) => provider.generate(prompt);
         }
       }
 
       const triaged = await triageOutput(rawForTriage, cfg.ollama, { remoteGenerate });
       if (triaged.triaged) {
         if (triaged.remote) {
-          maybeShowRemoteCodeNotice('output_triage', remoteModel ?? REMOTE_TRIAGE_MODEL);
+          maybeShowRemoteCodeNotice('output_triage', remoteModel ?? 'free-tier');
         }
         const who = triaged.remote ? `free-tier ${remoteModel}` : 'local model';
         savedOutput = [

@@ -18,13 +18,10 @@ import * as path from 'path';
 import { ProjectConfig } from '../types.js';
 import { isOllamaReachable } from './ollama.js';
 import { llmSelectFiles, selectFilesWithGenerate } from './llmSelector.js';
-import { geminiGenerate } from './gemini.js';
-import { loadGeminiKey } from './keys.js';
+import { firstAvailableProvider } from './remoteRouter.js';
 import { shouldShowRemoteCodeNotice, remoteCodeNoticeText } from './consent.js';
 import { loadState, saveState } from './state.js';
 import { SousChefTask } from '../types.js';
-
-const REMOTE_SELECTION_MODEL = 'gemini-2.5-flash-lite';
 
 /**
  * Show the one-time "code is leaving the machine to a free tier" notice if it
@@ -137,33 +134,32 @@ export async function selectFilesWithStrategy(
 }
 
 /**
- * Attempt remote file selection via Gemini. Returns null on any failure (caller
- * falls back to heuristic). Shows the one-time code-consent notice on first use.
+ * Attempt remote file selection via the first available free-tier provider.
+ * Returns null on any failure (caller falls back to heuristic). Shows the
+ * one-time code-consent notice on first use.
  */
 async function tryRemoteSelection(
   taskDescription: string,
   config: ProjectConfig,
 ): Promise<SelectionResult | null> {
-  const key = loadGeminiKey();
-  if (!key) return null;
+  const provider = firstAvailableProvider(process.env, config.remote?.provider);
+  if (!provider) return null;
 
   // One-time consent notice (code is about to leave the machine to a free tier).
-  maybeShowRemoteCodeNotice('file_selection', REMOTE_SELECTION_MODEL);
+  maybeShowRemoteCodeNotice('file_selection', `${provider.label} · ${provider.model}`);
 
   try {
     const allFiles = walkAllSourceFiles(config).slice(0, LLM_CANDIDATE_CAP);
     const selections = await selectFilesWithGenerate(
       taskDescription, allFiles, config.root, MAX_RESULTS,
-      (prompt) => geminiGenerate(prompt, {
-        apiKey: key, model: REMOTE_SELECTION_MODEL, timeoutMs: 30000,
-      }),
+      (prompt) => provider.generate(prompt),
     );
     if (selections.length === 0) return null;
     const files: SelectedFile[] = selections.map(s => ({
       filepath: path.join(config.root, s.path),
       reason: s.reason,
     }));
-    return { files, strategy: 'remote', fallbackReason: '', remoteModel: REMOTE_SELECTION_MODEL };
+    return { files, strategy: 'remote', fallbackReason: '', remoteModel: provider.model };
   } catch {
     return null;
   }

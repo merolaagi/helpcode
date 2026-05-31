@@ -39,6 +39,12 @@ export interface RemoteSettings {
    * effect.
    */
   allowRemoteCode: boolean;
+  /**
+   * Preferred remote provider id ("gemini" | "kimi" | "grok" | "openai"). If
+   * set and that provider has a key, it's used; otherwise helpcode falls back
+   * to priority order among providers that have keys.
+   */
+  provider?: string;
 }
 
 /** Local-LLM configuration. Opt-in; absent or disabled = heuristic only. */

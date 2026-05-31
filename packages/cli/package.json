@@ -1,6 +1,6 @@
 {
   "name": "@manishbht/helpcode",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "description": "A local agent that makes Claude.ai conversations efficient enough to ship real projects on a Pro subscription.",
   "type": "module",
   "main": "dist/src/index.js",

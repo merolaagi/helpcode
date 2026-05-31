@@ -45,6 +45,33 @@ export function loadGeminiKey(
 }
 
 /**
+ * Resolve an API key for any provider, by its env var name, with the same
+ * precedence: env var first, then .helpcode/keys.json (keyed by a short name).
+ * `envVar` is e.g. "XAI_API_KEY"; `fileKey` is the keys.json field, e.g. "grok".
+ */
+export function loadProviderKey(
+  envVar: string,
+  fileKey: string,
+  cwd: string = process.cwd(),
+  env: Record<string, string | undefined> = process.env,
+): string | null {
+  const fromEnv = env[envVar];
+  if (typeof fromEnv === 'string' && fromEnv.trim().length > 0) {
+    return fromEnv.trim();
+  }
+  const file = path.join(cwd, KEYS_FILE);
+  if (!fs.existsSync(file)) return null;
+  try {
+    const parsed = JSON.parse(fs.readFileSync(file, 'utf-8'));
+    const k = parsed?.[fileKey];
+    if (typeof k === 'string' && k.trim().length > 0) return k.trim();
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Whether a keys.json exists but is NOT gitignored — a footgun worth warning
  * about (the user could commit their key). Best-effort: checks for a literal
  * keys.json or .helpcode/ entry in .gitignore.
