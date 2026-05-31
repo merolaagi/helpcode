@@ -25,8 +25,10 @@ const FALLBACK_MAX_LINES = 40;
 export interface TriageResult {
   /** The compacted output to put in the brief. */
   text: string;
-  /** True if the local model produced the summary; false if fallback. */
+  /** True if a model (local or remote) produced the summary; false if fallback. */
   triaged: boolean;
+  /** True if the remote model produced it (for the cockpit). */
+  remote?: boolean;
 }
 
 type GenerateImpl = (
@@ -39,6 +41,12 @@ type GenerateImpl = (
 export interface TriageDeps {
   /** Injectable model call for testing. Defaults to the real Ollama client. */
   generateImpl?: GenerateImpl;
+  /**
+   * Optional remote-model fallback (prompt → text). Supplied by the caller ONLY
+   * when allowRemoteCode is on and a key is present (triage output is
+   * code-bearing). Tried after local fails, before deterministic truncation.
+   */
+  remoteGenerate?: (prompt: string) => Promise<string>;
 }
 
 /** Is this output worth sending to the model? Long, and Ollama enabled. */
@@ -68,6 +76,11 @@ export function buildTriagePrompt(output: string): string {
 /**
  * Triage command output. Returns a compacted version plus whether the model
  * was used. Never throws — any failure falls back to deterministic truncation.
+ *
+ * Order: local model → remote model (if provided; privacy-gated by the caller)
+ * → deterministic truncation. `deps.remoteGenerate` is supplied by the caller
+ * only when allowRemoteCode is on and a key is present — triage output can
+ * contain code, so it's code-bearing.
  */
 export async function triageOutput(
   output: string,
@@ -83,22 +96,34 @@ export async function triageOutput(
     return { text, triaged: false };
   }
 
+  const prompt = buildTriagePrompt(output);
+
+  // 1. Local model (cheapest).
   const generateImpl = deps.generateImpl ?? generate;
   try {
     const summary = await generateImpl(
-      ollama.host,
-      ollama.model,
-      buildTriagePrompt(output),
-      { timeoutMs: ollama.timeoutMs },
+      ollama.host, ollama.model, prompt, { timeoutMs: ollama.timeoutMs },
     );
     if (summary && summary.trim().length > 0) {
       return { text: summary.trim(), triaged: true };
     }
-    // Empty model result: fall back.
-    return { text: truncateLines(output, FALLBACK_MAX_LINES, 'lines'), triaged: false };
   } catch (e) {
-    // Transport/timeout/etc.: fall back to deterministic truncation.
     void (e instanceof OllamaError);
-    return { text: truncateLines(output, FALLBACK_MAX_LINES, 'lines'), triaged: false };
+    // fall through to remote / deterministic
   }
+
+  // 2. Remote model, if the caller provided one (privacy-gated upstream).
+  if (deps.remoteGenerate) {
+    try {
+      const summary = await deps.remoteGenerate(prompt);
+      if (summary && summary.trim().length > 0) {
+        return { text: summary.trim(), triaged: true, remote: true };
+      }
+    } catch {
+      // fall through to deterministic
+    }
+  }
+
+  // 3. Deterministic truncation — always works.
+  return { text: truncateLines(output, FALLBACK_MAX_LINES, 'lines'), triaged: false };
 }

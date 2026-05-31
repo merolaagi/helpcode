@@ -6,6 +6,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.3.3] — 2026-05-30
+
+### Added
+
+- **`allowRemoteCode` opt-in** — code-bearing sous-chef tasks (file selection,
+  output triage) can now route to a remote free-tier model when the project
+  sets `"remote": { "allowRemoteCode": true }` in project.json (off by default).
+  This maximises free-tier leverage for users who accept the tradeoff.
+- **One-time consent notice** (core/consent.ts): the first time code would
+  leave the machine to a free tier, helpcode prints a clear notice naming the
+  provider and the training-data tradeoff, with how to disable. Shown once
+  (tracked in state), never again.
+- Remote file selection and remote output triage, both privacy-gated and
+  behind the local→remote→deterministic never-break chain.
+
+### Changed
+
+- `selectFilesWithGenerate` extracted in llmSelector so local (Ollama) and
+  remote (Gemini) selection share prompt-building, parsing, the empty-file
+  filter, and the hallucination guard.
+- Local-unavailable fallback reason is now a unified message across the
+  unreachable/error/empty cases.
+
+### Notes
+
+- 139/139 tests passing. Verified end-to-end: with the opt-in on and local
+  disabled, file selection ran on Gemini over real file contents, and the
+  consent notice fired once.
+- Default behaviour is unchanged: no opt-in, no key → exactly v0.3.2.
+
 ## [0.3.2] — 2026-05-30
 
 ### Added

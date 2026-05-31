@@ -16,8 +16,34 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { ProjectConfig } from '../types.js';
-import { isOllamaReachable, OllamaError } from './ollama.js';
-import { llmSelectFiles } from './llmSelector.js';
+import { isOllamaReachable } from './ollama.js';
+import { llmSelectFiles, selectFilesWithGenerate } from './llmSelector.js';
+import { geminiGenerate } from './gemini.js';
+import { loadGeminiKey } from './keys.js';
+import { shouldShowRemoteCodeNotice, remoteCodeNoticeText } from './consent.js';
+import { loadState, saveState } from './state.js';
+import { SousChefTask } from '../types.js';
+
+const REMOTE_SELECTION_MODEL = 'gemini-2.5-flash-lite';
+
+/**
+ * Show the one-time "code is leaving the machine to a free tier" notice if it
+ * hasn't been shown before, and persist that it has. Best-effort; never throws.
+ */
+function maybeShowRemoteCodeNotice(task: SousChefTask, model: string): void {
+  try {
+    const state = loadState();
+    const alreadyShown = state.flags?.remoteCodeNoticeShown === true;
+    if (shouldShowRemoteCodeNotice({ allowRemoteCode: true, task, alreadyShown })) {
+      // eslint-disable-next-line no-console
+      console.error('\n' + remoteCodeNoticeText(model) + '\n');
+      state.flags = { ...(state.flags ?? {}), remoteCodeNoticeShown: true };
+      saveState(state);
+    }
+  } catch {
+    // never block selection on the notice
+  }
+}
 
 const IGNORE_DIRS = new Set([
   '.git', '.venv', 'venv', 'env', 'node_modules', '__pycache__',
@@ -50,15 +76,20 @@ export interface SelectedFile {
 export interface SelectionResult {
   files: SelectedFile[];
   /** Which strategy actually produced the result. */
-  strategy: 'llm' | 'heuristic';
+  strategy: 'llm' | 'remote' | 'heuristic';
   /** If the LLM was attempted but fell back, why. Empty otherwise. */
   fallbackReason: string;
+  /** For the remote strategy: the model used (for the cockpit). */
+  remoteModel?: string;
 }
 
 /**
- * The entry point used by `ask`. Chooses the LLM strategy when configured and
- * reachable, otherwise the heuristic. Never throws — any LLM failure degrades
- * to the heuristic with a recorded reason.
+ * The entry point used by `ask`. Chooses, cheapest-first:
+ *   local LLM (Ollama) → remote free-tier (if opted in) → keyword heuristic.
+ * Never throws — any model failure degrades to the next option with a reason.
+ *
+ * The remote branch only runs when allowRemoteCode is on AND a key is present:
+ * file selection sends file signatures (code), so it's privacy-gated.
  */
 export async function selectFilesWithStrategy(
   taskDescription: string,
@@ -70,33 +101,72 @@ export async function selectFilesWithStrategy(
 
   if (wantLlm && ollama) {
     const reachable = await isOllamaReachable(ollama.host, { timeoutMs: 1000 });
-    if (!reachable) {
-      return heuristicResult(taskDescription, config, 'Ollama not reachable');
-    }
-    try {
-      const allFiles = walkAllSourceFiles(config).slice(0, LLM_CANDIDATE_CAP);
-      const selections = await llmSelectFiles(taskDescription, allFiles, config.root, {
-        host: ollama.host,
-        model: ollama.model,
-        count: MAX_RESULTS,
-        timeoutMs: ollama.timeoutMs,
-      });
-      if (selections.length === 0) {
-        return heuristicResult(taskDescription, config, 'model returned no usable files');
+    if (reachable) {
+      try {
+        const allFiles = walkAllSourceFiles(config).slice(0, LLM_CANDIDATE_CAP);
+        const selections = await llmSelectFiles(taskDescription, allFiles, config.root, {
+          host: ollama.host,
+          model: ollama.model,
+          count: MAX_RESULTS,
+          timeoutMs: ollama.timeoutMs,
+        });
+        if (selections.length > 0) {
+          const files: SelectedFile[] = selections.map(s => ({
+            filepath: path.join(config.root, s.path),
+            reason: s.reason,
+          }));
+          return { files, strategy: 'llm', fallbackReason: '' };
+        }
+        // fall through to remote/heuristic
+      } catch {
+        // fall through to remote/heuristic
       }
-      // Map relative paths back to absolute for the caller
-      const files: SelectedFile[] = selections.map(s => ({
-        filepath: path.join(config.root, s.path),
-        reason: s.reason,
-      }));
-      return { files, strategy: 'llm', fallbackReason: '' };
-    } catch (e) {
-      const why = e instanceof OllamaError ? e.message : (e as Error).message;
-      return heuristicResult(taskDescription, config, why);
     }
   }
 
-  return heuristicResult(taskDescription, config, '');
+  // Remote branch: only if NOT forcing heuristic, the project opted into
+  // sending code remotely, and a key is configured. Selection sends code
+  // (file signatures), so the privacy gate requires allowRemoteCode.
+  if (!opts.forceHeuristic && config.remote?.allowRemoteCode === true) {
+    const remote = await tryRemoteSelection(taskDescription, config);
+    if (remote) return remote;
+  }
+
+  return heuristicResult(taskDescription, config,
+    wantLlm ? 'local model unavailable; used keyword heuristic' : '');
+}
+
+/**
+ * Attempt remote file selection via Gemini. Returns null on any failure (caller
+ * falls back to heuristic). Shows the one-time code-consent notice on first use.
+ */
+async function tryRemoteSelection(
+  taskDescription: string,
+  config: ProjectConfig,
+): Promise<SelectionResult | null> {
+  const key = loadGeminiKey();
+  if (!key) return null;
+
+  // One-time consent notice (code is about to leave the machine to a free tier).
+  maybeShowRemoteCodeNotice('file_selection', REMOTE_SELECTION_MODEL);
+
+  try {
+    const allFiles = walkAllSourceFiles(config).slice(0, LLM_CANDIDATE_CAP);
+    const selections = await selectFilesWithGenerate(
+      taskDescription, allFiles, config.root, MAX_RESULTS,
+      (prompt) => geminiGenerate(prompt, {
+        apiKey: key, model: REMOTE_SELECTION_MODEL, timeoutMs: 30000,
+      }),
+    );
+    if (selections.length === 0) return null;
+    const files: SelectedFile[] = selections.map(s => ({
+      filepath: path.join(config.root, s.path),
+      reason: s.reason,
+    }));
+    return { files, strategy: 'remote', fallbackReason: '', remoteModel: REMOTE_SELECTION_MODEL };
+  } catch {
+    return null;
+  }
 }
 
 function heuristicResult(

@@ -110,3 +110,38 @@ test('triage: disabled config returns deterministic truncation without model', a
   assert.equal(result.triaged, false);
   assert.ok(result.text.length > 0);
 });
+
+// --- v0.3.3: remote fallback (privacy-gated, supplied by caller) ---
+
+test('triage: falls back to remote when local fails and remoteGenerate provided', async () => {
+  const localFails = async () => { throw new Error('ollama down'); };
+  const remoteOK = async () => 'remote: the key failure is X';
+  const result = await triageOutput(LONG_PYTEST, {
+    enabled: true, host: 'h', model: 'm', timeoutMs: 1000,
+  }, { generateImpl: localFails, remoteGenerate: remoteOK });
+  assert.equal(result.triaged, true);
+  assert.equal(result.remote, true);
+  assert.match(result.text, /the key failure is X/);
+});
+
+test('triage: deterministic truncation when both local and remote fail', async () => {
+  const localFails = async () => { throw new Error('down'); };
+  const remoteFails = async () => { throw new Error('429'); };
+  const result = await triageOutput(LONG_PYTEST, {
+    enabled: true, host: 'h', model: 'm', timeoutMs: 1000,
+  }, { generateImpl: localFails, remoteGenerate: remoteFails });
+  assert.equal(result.triaged, false);
+  assert.ok(result.text.length > 0);
+});
+
+test('triage: local success means remote is never called', async () => {
+  let remoteCalled = false;
+  const localOK = async () => 'local summary';
+  const remote = async () => { remoteCalled = true; return 'remote'; };
+  const result = await triageOutput(LONG_PYTEST, {
+    enabled: true, host: 'h', model: 'm', timeoutMs: 1000,
+  }, { generateImpl: localOK, remoteGenerate: remote });
+  assert.equal(result.triaged, true);
+  assert.equal(result.remote, undefined);
+  assert.equal(remoteCalled, false, 'remote must not be called when local succeeds');
+});

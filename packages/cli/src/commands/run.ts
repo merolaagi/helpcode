@@ -16,7 +16,27 @@ import { loadState, saveState, appendSousChefEvent } from '../core/state.js';
 import { AgentState } from '../types.js';
 import { projectExists, loadProjectConfig } from '../core/project.js';
 import { triageOutput, shouldTriage } from '../core/triage.js';
+import { geminiGenerate } from '../core/gemini.js';
+import { loadGeminiKey } from '../core/keys.js';
+import { shouldShowRemoteCodeNotice, remoteCodeNoticeText } from '../core/consent.js';
+import { SousChefTask } from '../types.js';
 import { c, log } from '../lib/ui.js';
+
+const REMOTE_TRIAGE_MODEL = 'gemini-2.5-flash-lite';
+
+function maybeShowRemoteCodeNotice(task: SousChefTask, model: string): void {
+  try {
+    const s = loadState();
+    const alreadyShown = s.flags?.remoteCodeNoticeShown === true;
+    if (shouldShowRemoteCodeNotice({ allowRemoteCode: true, task, alreadyShown })) {
+      console.error('\n' + remoteCodeNoticeText(model) + '\n');
+      s.flags = { ...(s.flags ?? {}), remoteCodeNoticeShown: true };
+      saveState(s);
+    }
+  } catch {
+    // never block on the notice
+  }
+}
 
 const MAX_OUTPUT_LINES = 40;
 
@@ -66,17 +86,35 @@ export async function handleRun(command: string, opts: RunOptions = {}): Promise
     const cfg = loadConfigSafe();
     const rawForTriage = [result.stdout, result.stderr].filter(Boolean).join('\n').trim();
     if (cfg?.ollama && shouldTriage(rawForTriage, cfg.ollama)) {
-      const triaged = await triageOutput(rawForTriage, cfg.ollama);
+      // Triage output is code-bearing, so a remote fallback is only offered when
+      // the project opted into allowRemoteCode AND a key is present.
+      let remoteGenerate: ((prompt: string) => Promise<string>) | undefined;
+      let remoteModel: string | null = null;
+      if (cfg.remote?.allowRemoteCode === true) {
+        const key = loadGeminiKey();
+        if (key) {
+          remoteModel = REMOTE_TRIAGE_MODEL;
+          remoteGenerate = (prompt: string) => geminiGenerate(prompt, {
+            apiKey: key, model: REMOTE_TRIAGE_MODEL, timeoutMs: 30000,
+          });
+        }
+      }
+
+      const triaged = await triageOutput(rawForTriage, cfg.ollama, { remoteGenerate });
       if (triaged.triaged) {
+        if (triaged.remote) {
+          maybeShowRemoteCodeNotice('output_triage', remoteModel ?? REMOTE_TRIAGE_MODEL);
+        }
+        const who = triaged.remote ? `free-tier ${remoteModel}` : 'local model';
         savedOutput = [
           `$ ${command}`,
           `Exit: ${result.exitCode}    Time: ${(result.durationMs / 1000).toFixed(2)}s`,
           '',
-          '--- key failure (summarised by local model) ---',
+          `--- key failure (summarised by ${who}) ---`,
           triaged.text,
         ].join('\n');
-        log.dim('(summarised long output with local model for the next brief)');
-        recordTriageEvent(state, cfg.ollama.model, rawForTriage, triaged.text);
+        log.dim(`(summarised long output with ${who} for the next brief)`);
+        recordTriageEvent(state, who, rawForTriage, triaged.text, triaged.remote === true);
       }
     }
 
@@ -129,17 +167,18 @@ function normalise(cmd: string): string {
 /** Append a triage sous-chef event to the in-memory state (saved by caller). */
 function recordTriageEvent(
   state: AgentState,
-  model: string,
+  workerLabel: string,
   rawOutput: string,
   triagedText: string,
+  remote: boolean,
 ): void {
   const rawLines = rawOutput.split('\n').length;
   const triagedLines = triagedText.split('\n').length;
   appendSousChefEvent(state, {
     at: new Date().toISOString(),
     task: 'output_triage',
-    worker: 'local',
-    model,
+    worker: remote ? 'remote' : 'local',
+    model: workerLabel.replace(/^free-tier /, ''),
     summary: `triaged ${rawLines} lines to key failure`,
     outcome: 'ok',
     // rough: lines dropped ≈ tokens saved, ~8 tokens/line

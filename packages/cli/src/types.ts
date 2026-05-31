@@ -20,6 +20,25 @@ export interface ProjectConfig {
   createdAt: string;
   /** Optional local-LLM (Ollama) settings for smarter file selection (v0.2). */
   ollama?: OllamaSettings;
+  /** Optional remote free-tier sous-chef settings (v0.3.2). */
+  remote?: RemoteSettings;
+}
+
+/**
+ * Remote free-tier sous-chef configuration (v0.3.2). Opt-in by presence of an
+ * API key (env var or .helpcode/keys.json) — this block only carries the
+ * privacy preference, never the key itself (keys must never touch project.json).
+ */
+export interface RemoteSettings {
+  /**
+   * Allow code-bearing tasks (file selection, output triage) to be sent to a
+   * remote FREE-TIER provider, whose terms may use inputs to train their models.
+   * Default false: by default only decomposition (task description, no code)
+   * goes remote. Flip to true ONLY if you accept your source code leaving the
+   * machine to a free tier. A one-time notice is shown the first time it takes
+   * effect.
+   */
+  allowRemoteCode: boolean;
 }
 
 /** Local-LLM configuration. Opt-in; absent or disabled = heuristic only. */
@@ -56,6 +75,14 @@ export interface AgentState {
    * the state file stays small.
    */
   sousChefLog: SousChefEvent[];
+  /** One-time UI flags (e.g. consent notices already shown). Optional. */
+  flags?: StateFlags;
+}
+
+/** One-time flags persisted so we don't repeat notices. All optional. */
+export interface StateFlags {
+  /** True once the "sending code to a free tier" notice has been shown. */
+  remoteCodeNoticeShown?: boolean;
 }
 
 export interface CurrentTask {

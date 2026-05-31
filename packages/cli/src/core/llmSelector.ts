@@ -147,15 +147,18 @@ export function parseSelectionResponse(
  * "model ran but found nothing" (empty array) from "couldn't reach model"
  * (throw) — both lead to fallback, but the caller may log them differently.
  */
-export async function llmSelectFiles(
+/**
+ * Backend-agnostic file selection: builds the prompt, calls the provided
+ * generate function (Ollama or Gemini or any text model), parses + validates.
+ * The empty-file filter and hallucination guard apply regardless of backend.
+ */
+export async function selectFilesWithGenerate(
   task: string,
   candidatePaths: string[],
   projectRoot: string,
-  opts: { host: string; model: string; count: number; timeoutMs?: number },
+  count: number,
+  generateFn: (prompt: string) => Promise<string>,
 ): Promise<Selection[]> {
-  // Filter out empty / near-empty files (e.g. empty __init__.py) before they
-  // ever reach the model. Matches the heuristic selector's v0.1.1 behaviour
-  // and stops the model padding its answer with files it admits are empty.
   const meaningful = candidatePaths.filter(p => {
     try {
       return fs.readFileSync(p, 'utf-8').trim().length >= 10;
@@ -169,11 +172,21 @@ export async function llmSelectFiles(
     signature: buildSignature(p),
   }));
 
-  const prompt = buildSelectionPrompt(task, candidates, opts.count);
-  const response = await generate(opts.host, opts.model, prompt, {
-    timeoutMs: opts.timeoutMs,
-  });
+  const prompt = buildSelectionPrompt(task, candidates, count);
+  const response = await generateFn(prompt);
   return parseSelectionResponse(response, candidates);
+}
+
+export async function llmSelectFiles(
+  task: string,
+  candidatePaths: string[],
+  projectRoot: string,
+  opts: { host: string; model: string; count: number; timeoutMs?: number },
+): Promise<Selection[]> {
+  return selectFilesWithGenerate(
+    task, candidatePaths, projectRoot, opts.count,
+    (prompt) => generate(opts.host, opts.model, prompt, { timeoutMs: opts.timeoutMs }),
+  );
 }
 
 // Re-export for callers that want to detect transport errors specifically.

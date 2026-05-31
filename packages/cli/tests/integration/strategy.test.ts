@@ -77,6 +77,6 @@ test('strategy: falls back to heuristic when ollama enabled but unreachable', as
     }),
   );
   assert.equal(result.strategy, 'heuristic');
-  assert.match(result.fallbackReason, /reachable|not/i);
+  assert.match(result.fallbackReason, /unavailable|reachable|not/i);
   assert.ok(result.files.length > 0, 'fallback still returns files');
 });
