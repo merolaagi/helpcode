@@ -22,7 +22,7 @@ import { handleReset } from './commands/reset.js';
 import { HelpcodeError } from './lib/errors.js';
 import { c, log } from './lib/ui.js';
 
-const VERSION = '0.3.3';
+const VERSION = '0.3.4';
 
 const HELP = `helpcode v${VERSION}
 
@@ -42,7 +42,7 @@ COMMANDS:
   apply [--yes] [--dry-run]  Apply Claude's pasted reply (from stdin)
   run "<command>"            Run a shell command, get compact output
   status                     Show current task and state
-  cockpit                    Show the sous-chef kitchen this session
+  cockpit [--html] [--out F]  Show the kitchen; --html writes a visual cockpit
   reset [--yes]              Clear state (project config is untouched)
 
 GLOBAL FLAGS:
@@ -99,8 +99,10 @@ export async function run(argv: string[]): Promise<number> {
       case 'status':
         return await handleStatus();
 
-      case 'cockpit':
-        return await handleCockpit();
+      case 'cockpit': {
+        const out = extractFlagValues(rest, '--out')[0];
+        return await handleCockpit({ html: rest.includes('--html'), out });
+      }
 
       case 'reset':
         return await handleReset({ yes: rest.includes('--yes') });

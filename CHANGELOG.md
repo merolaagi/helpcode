@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.3.4] — 2026-05-31
+
+### Added
+
+- **`helpcode cockpit --html`** — a visual cockpit. Generates a self-contained
+  HTML file (no external deps, no network) from the real sous-chef event log:
+  mission-control layout with color-coded worker panels (cyan local, green
+  free-tier, brick for the Claude principal), a central CLI shell showing the
+  real event stream as terminal output, session metrics, a live activity feed,
+  and routing rules. Aspirational features (complexity scorer, cross-model
+  review, more providers) are shown as clearly-marked "demo"/roadmap panels.
+- `--out <path>` to choose where the HTML is written (default
+  `.helpcode/cockpit.html`).
+- `core/cockpitHtml.ts` with a tested view model separated from rendering.
+
 ## [0.3.3] — 2026-05-30
 
 ### Added
