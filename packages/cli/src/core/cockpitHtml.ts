@@ -52,6 +52,15 @@ export interface CockpitViewModel {
 
 const RECENT_CAP = 12;
 
+/** Map a model string back to its provider id, for quota lookup. */
+function providerIdFromModel(model: string | null): string | null {
+  if (!model) return null;
+  if (model.startsWith('gemini')) return 'gemini';
+  if (model.startsWith('grok')) return 'grok';
+  if (model.startsWith('gpt')) return 'openai';
+  return null;
+}
+
 function tierLabel(kind: WorkerKind): string {
   switch (kind) {
     case 'local': return 'local';
@@ -70,15 +79,29 @@ function comingCatalogue(): ComingVM[] {
   ];
 }
 
-export function buildCockpitViewModel(log: SousChefEvent[]): CockpitViewModel {
-  const workers: PanelVM[] = summariseWorkers(log).map(w => ({
-    model: w.model ?? tierLabel(w.kind),
-    kind: w.kind,
-    tierLabel: tierLabel(w.kind),
-    events: w.eventsThisSession,
-    lastSummary: w.lastSummary,
-    quotaUsed: w.quotaUsed,
-  }));
+export function buildCockpitViewModel(
+  log: SousChefEvent[],
+  quotaLookup?: (providerId: string) => number | null,
+): CockpitViewModel {
+  const workers: PanelVM[] = summariseWorkers(log).map(w => {
+    let quotaUsed = w.quotaUsed;
+    // For remote workers, look up real quota fraction by provider id.
+    if (w.kind === 'remote' && quotaLookup) {
+      const pid = providerIdFromModel(w.model);
+      if (pid) {
+        const frac = quotaLookup(pid);
+        if (frac !== null) quotaUsed = frac;
+      }
+    }
+    return {
+      model: w.model ?? tierLabel(w.kind),
+      kind: w.kind,
+      tierLabel: tierLabel(w.kind),
+      events: w.eventsThisSession,
+      lastSummary: w.lastSummary,
+      quotaUsed,
+    };
+  });
 
   const recent: FeedItemVM[] = [...log]
     .sort((a, b) => a.at.localeCompare(b.at))
@@ -242,7 +265,7 @@ export function renderCockpitHtml(vm: CockpitViewModel): string {
   --brick:#cc785c;--brick2:#da7756;--brick-dim:#2a1610;
   --font-mono:'JetBrains Mono','Fira Mono','Courier New',monospace;
 }
-body{background:var(--bg);color:var(--text);font-family:'system-ui',sans-serif;font-size:13px;min-height:800px;padding:12px;display:flex;flex-direction:column;gap:8px}
+body{background:var(--bg);color:var(--text);font-family:'system-ui',sans-serif;font-size:13px;min-height:800px;padding:12px;display:flex;flex-direction:column;gap:8px;max-width:1400px;margin:0 auto}
 .sr-only{position:absolute;width:1px;height:1px;overflow:hidden}
 .topbar{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:var(--bg2);border:0.5px solid var(--border);border-radius:8px}
 .topbar-left{display:flex;align-items:center;gap:12px}
@@ -400,7 +423,7 @@ footer{color:var(--text3);font-size:10px;margin-top:4px;padding:8px 4px;text-ali
         <span style="margin-left:6px;font-size:10px;color:var(--text3)">helpcode · sous-chef shell · live</span>
       </div>
       <div class="cli-output">
-        \${vm.cli.map(l => \`<div class="cli-line-\${l.kind}">\${esc(l.text)}</div>\`).join('')}
+        ${vm.cli.map(l => `<div class="cli-line-${l.kind}">${esc(l.text)}</div>`).join('')}
       </div>
       <div class="cli-input-row">
         <span class="cli-prompt">\u276f</span>

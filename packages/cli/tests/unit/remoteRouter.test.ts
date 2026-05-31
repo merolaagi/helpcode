@@ -24,12 +24,6 @@ test('finds grok when only XAI_API_KEY is set', () => {
   assert.equal(p!.id, 'grok');
 });
 
-test('finds kimi when only MOONSHOT_API_KEY is set', () => {
-  const p = firstAvailableProvider({ MOONSHOT_API_KEY: 'm' });
-  assert.ok(p);
-  assert.equal(p!.id, 'kimi');
-});
-
 test('finds openai when only OPENAI_API_KEY is set', () => {
   const p = firstAvailableProvider({ OPENAI_API_KEY: 'o' });
   assert.ok(p);

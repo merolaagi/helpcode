@@ -13,13 +13,21 @@ import * as path from 'path';
 import { loadState } from '../core/state.js';
 import { renderCockpit } from '../core/cockpit.js';
 import { buildCockpitViewModel, renderCockpitHtml } from '../core/cockpitHtml.js';
+import { quotaFor } from '../core/quota.js';
 import { c, log } from '../lib/ui.js';
 
 export async function handleCockpit(opts: { html?: boolean; out?: string } = {}): Promise<number> {
   const state = loadState();
 
   if (opts.html) {
-    const vm = buildCockpitViewModel(state.sousChefLog);
+    // Real quota fraction per provider, for the panel bars.
+    const quotaLookup = (providerId: string): number | null => {
+      if (!state.quotas) return null;
+      const s = quotaFor(state.quotas, providerId);
+      if (!s || s.limitPerDay === null) return null;
+      return s.usedToday / s.limitPerDay;
+    };
+    const vm = buildCockpitViewModel(state.sousChefLog, quotaLookup);
     const html = renderCockpitHtml(vm);
     const outPath = opts.out ?? path.join('.helpcode', 'cockpit.html');
     const dir = path.dirname(outPath);

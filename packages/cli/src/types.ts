@@ -83,12 +83,28 @@ export interface AgentState {
   sousChefLog: SousChefEvent[];
   /** One-time UI flags (e.g. consent notices already shown). Optional. */
   flags?: StateFlags;
+  /** Per-provider quota tracking (v0.3.6). Optional; absent = none recorded. */
+  quotas?: QuotaState;
 }
 
 /** One-time flags persisted so we don't repeat notices. All optional. */
 export interface StateFlags {
   /** True once the "sending code to a free tier" notice has been shown. */
   remoteCodeNoticeShown?: boolean;
+}
+
+/** Per-provider quota tracking (v0.3.6). */
+export interface ProviderQuota {
+  /** UTC day (YYYY-MM-DD) the count applies to. */
+  day: string;
+  /** Requests made on that day. */
+  count: number;
+  /** ISO timestamp the provider is throttled until (after a 429), if any. */
+  throttledUntil?: string;
+}
+
+export interface QuotaState {
+  providers: Record<string, ProviderQuota>;
 }
 
 export interface CurrentTask {

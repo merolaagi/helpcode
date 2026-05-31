@@ -37,14 +37,6 @@ export interface ProviderConfig {
  */
 export const PROVIDERS: ProviderConfig[] = [
   {
-    id: 'kimi',
-    label: 'Kimi',
-    baseUrl: 'https://api.moonshot.ai/v1',
-    defaultModel: 'kimi-k2.5',
-    envVar: 'MOONSHOT_API_KEY',
-    freeTierNote: 'Moonshot free tier (~1000 req/day); verify current training policy.',
-  },
-  {
     id: 'grok',
     label: 'Grok',
     baseUrl: 'https://api.x.ai/v1',

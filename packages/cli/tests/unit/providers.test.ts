@@ -15,14 +15,18 @@ import {
 
 // ---------- provider registry ----------
 
-test('registry: includes kimi, grok, openai with distinct config', () => {
-  for (const id of ['kimi', 'grok', 'openai']) {
+test('registry: includes grok and openai with distinct config', () => {
+  for (const id of ['grok', 'openai']) {
     const p = getProvider(id);
     assert.ok(p, `${id} should be registered`);
     assert.ok(p!.baseUrl.startsWith('https://'), `${id} has a base url`);
     assert.ok(p!.defaultModel.length > 0, `${id} has a default model`);
     assert.ok(p!.envVar.endsWith('_API_KEY'), `${id} has an env var`);
   }
+});
+
+test('registry: kimi is not included', () => {
+  assert.equal(getProvider('kimi'), null);
 });
 
 test('registry: each provider has a distinct base url and env var', () => {
