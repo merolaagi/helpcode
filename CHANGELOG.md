@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.3.7] — 2026-05-31
+
+### Added — cockpit completeness pass
+
+- **Privacy banner**: the cockpit now shows the project's actual data-sharing
+  tier (local-only / decomposition-only / code-allowed) and preferred provider,
+  so it's clear at a glance what helpcode will send where.
+- **Available-workers roster**: every configured worker is shown even when idle
+  — local plus all remote providers — marked ready / no-key / throttled.
+- **Task breakdown**: per-session counts of selections, triages, decompositions.
+- **Throttle indicators**: a provider backing off after a 429 is shown throttled
+  on its panel and in the roster.
+- `core/cockpitContext.ts` (computePrivacy, computeAvailableWorkers), unit-tested.
+
+### Notes
+
+- All view-model enrichment — the cockpit now honestly reflects helpcode's full
+  behaviour. 187/187 tests.
+
 
 ## [0.3.5] — 2026-05-31
 

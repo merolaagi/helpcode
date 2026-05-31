@@ -11,9 +11,11 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { loadState } from '../core/state.js';
+import { loadProjectConfig, projectExists } from '../core/project.js';
 import { renderCockpit } from '../core/cockpit.js';
-import { buildCockpitViewModel, renderCockpitHtml } from '../core/cockpitHtml.js';
-import { quotaFor } from '../core/quota.js';
+import { buildCockpitViewModel, renderCockpitHtml, CockpitContext } from '../core/cockpitHtml.js';
+import { computePrivacy, computeAvailableWorkers } from '../core/cockpitContext.js';
+import { quotaFor, isThrottled } from '../core/quota.js';
 import { c, log } from '../lib/ui.js';
 
 export async function handleCockpit(opts: { html?: boolean; out?: string } = {}): Promise<number> {
@@ -27,7 +29,23 @@ export async function handleCockpit(opts: { html?: boolean; out?: string } = {})
       if (!s || s.limitPerDay === null) return null;
       return s.usedToday / s.limitPerDay;
     };
-    const vm = buildCockpitViewModel(state.sousChefLog, quotaLookup);
+
+    // Real-world context: privacy tier, full worker roster, throttle states.
+    const quotas = state.quotas ?? { providers: {} };
+    let context: CockpitContext = {};
+    if (projectExists()) {
+      const config = loadProjectConfig();
+      const throttledIds = new Set<string>(
+        ['gemini', 'grok', 'openai'].filter(id => isThrottled(quotas, id)),
+      );
+      context = {
+        privacy: computePrivacy(config, process.env),
+        available: computeAvailableWorkers(config, process.env, quotas),
+        throttledIds,
+      };
+    }
+
+    const vm = buildCockpitViewModel(state.sousChefLog, quotaLookup, context);
     const html = renderCockpitHtml(vm);
     const outPath = opts.out ?? path.join('.helpcode', 'cockpit.html');
     const dir = path.dirname(outPath);

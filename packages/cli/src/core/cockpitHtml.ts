@@ -25,6 +25,8 @@ export interface PanelVM {
   events: number;
   lastSummary: string | null;
   quotaUsed: number | null;
+  /** True if this worker is currently throttled (after a 429). Gap #5. */
+  throttled?: boolean;
 }
 
 export interface FeedItemVM {
@@ -41,9 +43,52 @@ export interface CliLineVM {
   text: string;
 }
 
+/** Gap #1: how many of each prep task ran this session. */
+export interface TaskBreakdownVM {
+  selection: number;
+  triage: number;
+  decomposition: number;
+  other: number;
+}
+
+/** Gap #2/#4: the project's current data-sharing posture and provider choice. */
+export interface PrivacyVM {
+  /** "local-only" | "decomposition-only" | "code-allowed" */
+  tier: 'local-only' | 'decomposition-only' | 'code-allowed';
+  label: string;
+  detail: string;
+  /** Preferred remote provider id from config, if set. Gap #4. */
+  preferredProvider: string | null;
+}
+
+/** Gap #3: a configured provider, whether or not it has run yet. */
+export interface AvailableWorkerVM {
+  id: string;
+  label: string;
+  kind: WorkerKind;
+  /** Has a key / is reachable-in-principle. */
+  available: boolean;
+  /** Currently backed off after a 429. */
+  throttled: boolean;
+  /** Why unavailable, if so (e.g. "no key"). */
+  note: string;
+}
+
+/** Optional real-world context the command supplies; all fields optional so
+ *  the builder still works (degraded) in tests without it. */
+export interface CockpitContext {
+  privacy?: PrivacyVM;
+  available?: AvailableWorkerVM[];
+  /** provider id -> throttled?  for marking live panels. */
+  throttledIds?: Set<string>;
+}
+
 export interface CockpitViewModel {
   workers: PanelVM[];
   metrics: SessionMetrics;
+  taskBreakdown: TaskBreakdownVM;
+  privacy: PrivacyVM | null;
+  available: AvailableWorkerVM[];
   recent: FeedItemVM[];
   cli: CliLineVM[];
   coming: ComingVM[];
@@ -79,18 +124,36 @@ function comingCatalogue(): ComingVM[] {
   ];
 }
 
+/** Gap #1: tally events by task type. */
+export function computeTaskBreakdown(log: SousChefEvent[]): TaskBreakdownVM {
+  const b: TaskBreakdownVM = { selection: 0, triage: 0, decomposition: 0, other: 0 };
+  for (const e of log) {
+    if (e.task === 'file_selection') b.selection += 1;
+    else if (e.task === 'output_triage') b.triage += 1;
+    else if (e.task === 'decomposition') b.decomposition += 1;
+    else b.other += 1;
+  }
+  return b;
+}
+
 export function buildCockpitViewModel(
   log: SousChefEvent[],
   quotaLookup?: (providerId: string) => number | null,
+  context: CockpitContext = {},
 ): CockpitViewModel {
+  const throttledIds = context.throttledIds ?? new Set<string>();
   const workers: PanelVM[] = summariseWorkers(log).map(w => {
     let quotaUsed = w.quotaUsed;
-    // For remote workers, look up real quota fraction by provider id.
-    if (w.kind === 'remote' && quotaLookup) {
+    let throttled = false;
+    // For remote workers, look up real quota fraction + throttle by provider id.
+    if (w.kind === 'remote') {
       const pid = providerIdFromModel(w.model);
       if (pid) {
-        const frac = quotaLookup(pid);
-        if (frac !== null) quotaUsed = frac;
+        if (quotaLookup) {
+          const frac = quotaLookup(pid);
+          if (frac !== null) quotaUsed = frac;
+        }
+        throttled = throttledIds.has(pid);
       }
     }
     return {
@@ -100,6 +163,7 @@ export function buildCockpitViewModel(
       events: w.eventsThisSession,
       lastSummary: w.lastSummary,
       quotaUsed,
+      throttled,
     };
   });
 
@@ -119,6 +183,9 @@ export function buildCockpitViewModel(
   return {
     workers,
     metrics: sessionMetrics(log),
+    taskBreakdown: computeTaskBreakdown(log),
+    privacy: context.privacy ?? null,
+    available: context.available ?? [],
     recent,
     cli,
     coming: comingCatalogue(),
@@ -178,7 +245,8 @@ function badgeFor(kind: WorkerKind): { cls: string; label: string } {
 function livePanel(p: PanelVM): string {
   const b = badgeFor(p.kind);
   // Panel border/glow encodes worker kind: local=cyan(working), remote=green, code=amber.
-  const stateClass = p.kind === 'local' ? 'working'
+  const stateClass = p.throttled ? 'throttled'
+    : p.kind === 'local' ? 'working'
     : p.kind === 'remote' ? 'remote-active'
     : p.kind === 'deterministic' ? 'fallback-active'
     : 'active';
@@ -206,6 +274,7 @@ function livePanel(p: PanelVM): string {
       </div>
       <div class="token-bar-wrap"><div class="token-label">${barLabel}</div><div class="token-bar"><div class="token-fill ${fillClass}" style="width:${pct}%"></div></div></div>
       <div class="task-chip ${chipClass}">${p.events} task(s) · ${esc(p.tierLabel)}</div>
+      ${p.throttled ? '<div class="panel-throttle">⚠ throttled — backing off after rate limit</div>' : ''}
       <div class="panel-log">
         <div class="log-line"><span class="log-msg ok">${p.lastSummary ? esc(p.lastSummary) : 'idle'}</span></div>
       </div>
@@ -238,6 +307,54 @@ function feedRows(items: FeedItemVM[]): string {
     const cls = i.outcome === 'ok' ? 'ok' : i.outcome === 'escalated' ? 'warn' : '';
     return `<div class="feed-row"><span class="log-ts">${esc(i.time)}</span><span class="log-msg ${cls}">${esc(i.who)}</span><span class="log-msg">${esc(i.summary)}</span></div>`;
   }).join('');
+}
+
+/** Gap #2/#4: a full-width privacy posture banner. */
+function privacyBannerHtml(p: PrivacyVM | null): string {
+  if (!p) return '';
+  const cls = p.tier === 'local-only' ? 'priv-local'
+    : p.tier === 'decomposition-only' ? 'priv-decomp'
+    : 'priv-code';
+  const pref = p.preferredProvider
+    ? `<span class="priv-pref">preferred provider: ${esc(p.preferredProvider)}</span>`
+    : '';
+  return `
+  <div class="privacy-banner ${cls}">
+    <span class="priv-dot"></span>
+    <span class="priv-label">${esc(p.label)}</span>
+    <span class="priv-detail">${esc(p.detail)}</span>
+    ${pref}
+  </div>`;
+}
+
+/** Gap #1: a compact task-type breakdown strip. */
+function taskBreakdownHtml(b: TaskBreakdownVM): string {
+  const cell = (label: string, n: number, cls: string) =>
+    `<span class="tb-cell"><span class="tb-n ${cls}">${n}</span><span class="tb-l">${label}</span></span>`;
+  return `
+  <div class="task-breakdown">
+    ${cell('selections', b.selection, 'blue')}
+    ${cell('triages', b.triage, 'cyan')}
+    ${cell('decompositions', b.decomposition, 'purple')}
+    ${b.other > 0 ? cell('other', b.other, 'dim') : ''}
+  </div>`;
+}
+
+/** Gap #3: roster of every configured worker, even idle. */
+function availableRosterHtml(workers: AvailableWorkerVM[]): string {
+  if (workers.length === 0) return '';
+  const row = (w: AvailableWorkerVM) => {
+    const state = w.throttled ? 'throttled'
+      : w.available ? 'ready' : 'no-key';
+    const stateLabel = w.throttled ? 'throttled'
+      : w.available ? 'ready' : 'no key';
+    return `<div class="roster-row roster-${state}">
+      <span class="roster-name">${esc(w.label)}</span>
+      <span class="roster-kind">${esc(w.kind)}</span>
+      <span class="roster-state">${stateLabel}</span>
+    </div>`;
+  };
+  return workers.map(row).join('');
 }
 
 export function renderCockpitHtml(vm: CockpitViewModel): string {
@@ -282,6 +399,32 @@ body{background:var(--bg);color:var(--text);font-family:'system-ui',sans-serif;f
 .dot.pulse{animation:pulse 2s ease-in-out infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 .status-text{font-size:11px;color:var(--text2)}
+.privacy-banner{display:flex;align-items:center;gap:10px;padding:7px 14px;border-radius:8px;border:0.5px solid var(--border);font-size:11px}
+.privacy-banner .priv-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.privacy-banner .priv-label{font-weight:600;letter-spacing:.3px}
+.privacy-banner .priv-detail{color:var(--text2)}
+.privacy-banner .priv-pref{margin-left:auto;color:var(--text3);font-size:10px}
+.priv-local{background:var(--blue-dim);border-color:var(--blue)}
+.priv-local .priv-dot{background:var(--blue)}.priv-local .priv-label{color:var(--blue)}
+.priv-decomp{background:var(--green-dim);border-color:var(--green2)}
+.priv-decomp .priv-dot{background:var(--green)}.priv-decomp .priv-label{color:var(--green)}
+.priv-code{background:var(--brick-dim);border-color:var(--brick)}
+.priv-code .priv-dot{background:var(--brick2)}.priv-code .priv-label{color:var(--brick2)}
+.task-breakdown{display:flex;gap:18px;padding:6px 10px;background:var(--bg3);border-radius:6px}
+.tb-cell{display:flex;align-items:baseline;gap:5px}
+.tb-n{font-size:14px;font-weight:600}
+.tb-n.blue{color:var(--blue)}.tb-n.cyan{color:var(--cyan)}.tb-n.purple{color:var(--purple)}.tb-n.dim{color:var(--text3)}
+.tb-l{font-size:10px;color:var(--text3)}
+.roster-row{display:flex;align-items:center;gap:8px;font-size:10px;padding:4px 6px;border-radius:4px;margin-bottom:3px;background:var(--bg3)}
+.roster-name{flex:1;color:var(--text)}
+.roster-kind{color:var(--text3);font-size:9px}
+.roster-state{font-size:9px;padding:1px 6px;border-radius:3px}
+.roster-ready .roster-state{background:var(--green-dim);color:var(--green)}
+.roster-no-key{opacity:.5}
+.roster-no-key .roster-state{background:var(--bg4);color:var(--text3)}
+.roster-throttled .roster-state{background:var(--amber-dim);color:var(--amber)}
+.llm-panel.throttled{border-color:var(--amber)!important}
+.panel-throttle{font-size:9px;color:var(--amber);margin-top:2px}
 .cockpit{display:grid;grid-template-columns:1fr 2fr 1fr;grid-template-rows:auto auto;gap:8px;flex:1}
 .llm-panel{background:var(--bg2);border:0.5px solid var(--border);border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:6px;min-height:160px;position:relative}
 .llm-panel.active{border-color:var(--border2)}
@@ -386,6 +529,7 @@ footer{color:var(--text3);font-size:10px;margin-top:4px;padding:8px 4px;text-ali
     <span class="status-text">${m.totalEvents} prep task(s) this session · ~${m.estTokensSaved} principal tokens saved</span>
   </div>
 </div>
+${privacyBannerHtml(vm.privacy)}
 
 <div class="cockpit">
   <div style="display:flex;flex-direction:column;gap:8px">${leftPanels}</div>
@@ -397,6 +541,7 @@ footer{color:var(--text3);font-size:10px;margin-top:4px;padding:8px 4px;text-ali
       <div class="metric"><span class="metric-label">fell back</span><span class="metric-val purple">${m.fallbacks}</span><span class="metric-sub">to cheaper</span></div>
       <div class="metric"><span class="metric-label">tokens saved</span><span class="metric-val green">~${m.estTokensSaved}</span><span class="metric-sub">principal</span></div>
     </div>
+    ${taskBreakdownHtml(vm.taskBreakdown)}
 
     <div class="orchestrator">
       <span class="demo-tag">demo</span>
@@ -451,10 +596,9 @@ footer{color:var(--text3);font-size:10px;margin-top:4px;padding:8px 4px;text-ali
     <div class="demo-overlay">first three rules are live; complexity routing is roadmap</div>
   </div>
 
-  <div class="side-panel roadmap">
-    <span class="demo-tag">demo</span>
-    <div class="side-title">roadmap</div>
-    ${vm.coming.map(c => `<div class="router-rule"><span class="router-cond">${esc(c.name)}</span></div>`).join('')}
+  <div class="side-panel routing">
+    <div class="side-title">workers available · live</div>
+    ${availableRosterHtml(vm.available) || '<div class="demo-overlay">run helpcode init to configure workers</div>'}
   </div>
 </div>
 
